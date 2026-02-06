@@ -1,0 +1,9 @@
+pyproject.toml
+src/credit_ocr_system/__init__.py
+src/credit_ocr_system/celery_app.py
+src/credit_ocr_system/tasks.py
+src/credit_ocr_system.egg-info/PKG-INFO
+src/credit_ocr_system.egg-info/SOURCES.txt
+src/credit_ocr_system.egg-info/dependency_links.txt
+src/credit_ocr_system.egg-info/requires.txt
+src/credit_ocr_system.egg-info/top_level.txt

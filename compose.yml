@@ -1,0 +1,77 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    environment:
+      POSTGRES_DB: dms_meta
+      POSTGRES_USER: dms
+      POSTGRES_PASSWORD: dms
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./database/schemas:/schema:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dms -d dms_meta"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  celery-worker:
+    image: python:3.11-slim
+    container_name: celery-worker
+    command: >
+      sh -c "
+        apt-get update && \
+        apt-get install -y --no-install-recommends poppler-utils && \
+        rm -rf /var/lib/apt/lists/* && \
+        python -m venv /opt/venv && \
+        /opt/venv/bin/pip install --upgrade pip && \
+        /opt/venv/bin/pip install . && \
+        /opt/venv/bin/pip uninstall -y opencv-python opencv-contrib-python || true && \
+        /opt/venv/bin/python -m celery -A credit_ocr_system.celery_app worker --loglevel=info --concurrency=2
+      "
+    volumes:
+      - .:/app
+    working_dir: /app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Important: inside Docker, use service names, not localhost
+      - DATABASE_URL=postgresql+psycopg://dms:dms@postgres:5432/dms_meta
+      - REDIS_URL=redis://redis:6379/0
+
+      # Azure Blob Storage
+      - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING}
+      - AZURE_BLOB_CONTAINER=${AZURE_BLOB_CONTAINER}
+
+      # Azure OpenAI
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
+      - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION}
+      - AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT}
+
+      - PYTHONPATH=/app
+      - IN_DOCKER=1
+    healthcheck:
+      test: ["CMD", "/opt/venv/bin/python", "-m", "celery", "-A", "credit_ocr_system.celery_app", "inspect", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  pgdata:
