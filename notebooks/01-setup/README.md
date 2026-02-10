@@ -76,7 +76,7 @@ source .venv/bin/activate
 ```
 Windows (PowerShell)
 ```powershell
-.venv\Scripts\activate
+source .venv/Scripts/activate
 ```
 
 ### 3. Install dependencies
@@ -103,7 +103,20 @@ AZURE_OPENAI_ENDPOINT=https://<your-resource>.openai.azure.com
 AZURE_OPENAI_API_KEY=<your-key>
 AZURE_OPENAI_API_VERSION=2024-10-21
 AZURE_OPENAI_DEPLOYMENT=<deployment-name>
+
+#ACU
+AZURE_AI_ENDPOINT=https://<your-resource>.services.ai.azure.com
+AZURE_AI_API_KEY=<your-key>
 ```
+
+Find Azure Storage Connection string here
+![alt text](../../images/blob-conn-string.png)
+
+Find Azure OpenAI Endpoint here
+![alt text](../../images/openai-endpoint.png)
+
+Find Azure OpenAI Key and Deployment here
+![alt text](../../images/openai-key-deployment.png)
 
 `.env` is automatically read by Docker Compose. For local Python / notebooks, load it manually (see below).
 
@@ -228,3 +241,4 @@ Expected response: the model prints `OK` (or the configured health-check reply).
 - The local infra (Postgres, Redis, Celery) is intended for development only; production should run in a managed environment and point to Azure services as needed.
 
 If you need this README exported to another location or converted to a project-level README, tell me where.
+
