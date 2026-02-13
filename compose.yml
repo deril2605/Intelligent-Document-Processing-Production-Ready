@@ -40,7 +40,7 @@ services:
         /opt/venv/bin/pip install --upgrade pip && \
         /opt/venv/bin/pip install . && \
         /opt/venv/bin/pip uninstall -y opencv-python opencv-contrib-python || true && \
-        /opt/venv/bin/python -m celery -A credit_ocr_system.celery_app worker --loglevel=info --concurrency=2
+        /opt/venv/bin/python -m celery -A src.celery_app worker --loglevel=info --concurrency=2
       "
     volumes:
       - .:/app
@@ -54,6 +54,11 @@ services:
       # Important: inside Docker, use service names, not localhost
       - DATABASE_URL=postgresql+psycopg://dms:dms@postgres:5432/dms_meta
       - REDIS_URL=redis://redis:6379/0
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGDATABASE=dms_meta
+      - PGUSER=dms
+      - PGPASSWORD=dms
 
       # Azure Blob Storage
       - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING}
@@ -65,10 +70,16 @@ services:
       - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION}
       - AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT}
 
+      # Azure Content Understanding (ACU)
+      - AZURE_AI_ENDPOINT=${AZURE_AI_ENDPOINT}
+      - AZURE_AI_API_KEY=${AZURE_AI_API_KEY}
+      - AZURE_AI_API_VERSION=${AZURE_AI_API_VERSION}
+      - ACU_ANALYZER_ID=${ACU_ANALYZER_ID}
+
       - PYTHONPATH=/app
       - IN_DOCKER=1
     healthcheck:
-      test: ["CMD", "/opt/venv/bin/python", "-m", "celery", "-A", "credit_ocr_system.celery_app", "inspect", "ping"]
+      test: ["CMD", "/opt/venv/bin/python", "-m", "celery", "-A", "src.celery_app", "inspect", "ping"]
       interval: 30s
       timeout: 10s
       retries: 3
