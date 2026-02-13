@@ -93,7 +93,7 @@ class AppConfig:
         self.azure.storage = AzureStorageConfig(
             account_name="YOUR_STORAGE_ACCOUNT_NAME",
             account_key="YOUR_STORAGE_ACCOUNT_KEY",
-            container_name="documents",
+            container_name=os.getenv("AZURE_BLOB_CONTAINER", "documents"),
         )
 
         # 🟢 PostgreSQL
