@@ -233,20 +233,22 @@ class PostgresMetadataRepository(MetadataRepository):
                     UPDATE extraction_jobs
                     SET status = %s,
                         error_message = %s,
+                        started_at = CASE WHEN %s = 'running' AND started_at IS NULL THEN NOW() ELSE started_at END,
                         completed_at = CASE WHEN %s IN ('done', 'failed', 'finished') THEN NOW() ELSE completed_at END
                     WHERE id = %s
                     """,
-                    (status, error_message, status, job_id),
+                    (status, error_message, status, status, job_id),
                 )
             else:
                 cursor.execute(
                     """
                     UPDATE extraction_jobs
                     SET status = %s,
+                        started_at = CASE WHEN %s = 'running' AND started_at IS NULL THEN NOW() ELSE started_at END,
                         completed_at = CASE WHEN %s IN ('done', 'failed', 'finished') THEN NOW() ELSE completed_at END
                     WHERE id = %s
                     """,
-                    (status, status, job_id),
+                    (status, status, status, job_id),
                 )
             return cursor.rowcount > 0
 

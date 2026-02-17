@@ -5,6 +5,8 @@ src/acu/analyze.py
 src/acu/client.py
 src/acu/config.py
 src/acu/parse.py
+src/api/__init__.py
+src/api/main.py
 src/config/__init__.py
 src/config/system.py
 src/credit_ocr_system/__init__.py

@@ -80,6 +80,15 @@ class AcuConfig:
 
 
 # -------------------------
+# API SERVICE
+# -------------------------
+@dataclass
+class ApiConfig:
+    host: str
+    port: int
+
+
+# -------------------------
 # MAIN APP CONFIG
 # -------------------------
 class AppConfig:
@@ -122,4 +131,10 @@ class AppConfig:
             endpoint=os.getenv("AZURE_AI_ENDPOINT", "https://YOUR-ACU-RESOURCE.cognitiveservices.azure.com/"),
             api_key=os.getenv("AZURE_AI_API_KEY", "YOUR_ACU_KEY"),
             analyzer_id=os.getenv("ACU_ANALYZER_ID", os.getenv("AZURE_AI_ANALYZER_ID", "your-analyzer-id")),
+        )
+
+        # API service
+        self.api = ApiConfig(
+            host=os.getenv("API_HOST", "127.0.0.1"),
+            port=int(os.getenv("API_PORT", "8000")),
         )

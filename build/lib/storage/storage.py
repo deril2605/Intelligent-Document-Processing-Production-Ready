@@ -34,6 +34,7 @@ class BlobStorage:
         if hasattr(self, "_initialized"):
             return
         self._connection_string = None
+        self._container_name = None
         self._bsc: Optional[BlobServiceClient] = None
         self._initialized_containers = set()
         self._container_lock = threading.Lock()
@@ -44,6 +45,12 @@ class BlobStorage:
         if self._connection_string is None:
             self._connection_string = os.environ["AZURE_STORAGE_CONNECTION_STRING"]
         return self._connection_string
+
+    @property
+    def container_name(self) -> str:
+        if self._container_name is None:
+            self._container_name = os.getenv("AZURE_BLOB_CONTAINER", "documents")
+        return self._container_name
 
     @property
     def blob_service_client(self) -> BlobServiceClient:
@@ -64,18 +71,17 @@ class BlobStorage:
             self._initialized_containers.add(container_name)
 
     def ensure_all_containers_ready(self) -> None:
-        for stage in Stage:
-            self._ensure_container_exists(stage.value)
+        self._ensure_container_exists(self.container_name)
 
-    def blob_path(self, doc_id: str, ext: str) -> PurePosixPath:
+    def blob_path(self, doc_id: str, stage: Stage, ext: str) -> PurePosixPath:
         if not ext.startswith(".") and not ext.startswith("_"):
             ext = f".{ext}"
-        return PurePosixPath(f"{doc_id}{ext}")
+        return PurePosixPath(f"{stage.value}/{doc_id}{ext}")
 
     def blob_client(self, doc_id: str, stage: Stage, ext: str) -> BlobClient:
-        self._ensure_container_exists(stage.value)
-        cc = self.blob_service_client.get_container_client(stage.value)
-        return cc.get_blob_client(str(self.blob_path(doc_id, ext)))
+        self._ensure_container_exists(self.container_name)
+        cc = self.blob_service_client.get_container_client(self.container_name)
+        return cc.get_blob_client(str(self.blob_path(doc_id, stage, ext)))
 
     def upload_blob(self, doc_id: str, stage: Stage, ext: str, data: bytes, overwrite: bool = True) -> None:
         bc = self.blob_client(doc_id, stage, ext)
