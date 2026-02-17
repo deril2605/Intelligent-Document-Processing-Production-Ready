@@ -30,3 +30,5 @@ src/scripts/run_pipeline.py
 src/storage/__init__.py
 src/storage/storage.py
 src/tasks/pipeline_tasks.py
+src/visualization/__init__.py
+src/visualization/acu_overlay.py

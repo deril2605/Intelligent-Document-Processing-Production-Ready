@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional
 from src.config import AppConfig
 from src.dms.service import DmsService
 from src.acu.client import AzureContentUnderstandingClient
+from src.visualization import build_acu_annotated_pages
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +98,21 @@ async def process_document_with_acu(
         ),
         content_type="application/json",
     )
+
+    # Best effort: generate and persist per-page annotated overlays from *_raw fields.
+    try:
+        annotated_pages = build_acu_annotated_pages(pdf_data=pdf_data, acu_result=acu_result)
+        for page_num, image_bytes in annotated_pages.items():
+            dms_service.storage_client.upload_bytes(
+                container=target_container,
+                blob_name=f"annotated/{document_id}_page_{page_num}.png",
+                data=image_bytes,
+                content_type="image/png",
+            )
+        if annotated_pages:
+            logger.info("Generated %d annotated page(s) for document %s", len(annotated_pages), document_id)
+    except Exception as e:
+        logger.warning("Annotated visualization generation failed for %s: %s", document_id, e)
 
     # Update DB with result blob path
     try:

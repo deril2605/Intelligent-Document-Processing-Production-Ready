@@ -5,11 +5,13 @@ import json
 import logging
 import os
 import tempfile
+import io
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import fitz
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
@@ -168,26 +170,48 @@ def _extract_fields_from_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(acu_result, dict):
         return {}
 
+    def _pages_from_source(source_value: Any) -> List[int]:
+        if not isinstance(source_value, str):
+            return []
+        pages: List[int] = []
+        for chunk in source_value.split("D("):
+            if not chunk:
+                continue
+            head = chunk.split(")", 1)[0]
+            first = head.split(",", 1)[0].strip()
+            try:
+                page_num = int(float(first))
+            except Exception:
+                continue
+            if page_num not in pages:
+                pages.append(page_num)
+        return pages
+
     def _coerce_field_value(field_payload: Any) -> Any:
         if not isinstance(field_payload, dict):
             return field_payload
+
+        pages = _pages_from_source(field_payload.get("source"))
 
         for key in ("valueString", "valueDate", "valueNumber", "valueInteger", "valueBoolean", "valueCurrency"):
             if key in field_payload:
                 return {
                     "value": field_payload[key],
                     "confidence": field_payload.get("confidence"),
+                    "pages": pages,
                 }
 
         if "valueObject" in field_payload:
             return {
                 "value": field_payload["valueObject"],
                 "confidence": field_payload.get("confidence"),
+                "pages": pages,
             }
         if "valueArray" in field_payload:
             return {
                 "value": field_payload["valueArray"],
                 "confidence": field_payload.get("confidence"),
+                "pages": pages,
             }
 
         return field_payload
@@ -274,6 +298,35 @@ def get_document_visualization(document_id: str, page: int = 1) -> StreamingResp
         BytesIO(image),
         media_type="image/png",
         headers={"Content-Disposition": f"inline; filename=visualization_{document_id}_page_{page}.png"},
+    )
+
+
+@router.get("/documents/{document_id}/page/{page}/image")
+@router.get("/page-image/{document_id}")
+def get_document_page_image(document_id: str, page: int = 1) -> StreamingResponse:
+    if page < 1:
+        raise HTTPException(status_code=400, detail="Page must be >= 1")
+
+    proc = _new_processor()
+    pdf_data = proc.dms_service.download_document(document_id=document_id)
+    if not pdf_data:
+        raise HTTPException(status_code=404, detail=f"Raw document not found for {document_id}")
+
+    try:
+        pdf = fitz.open(stream=pdf_data, filetype="pdf")
+        if page > len(pdf):
+            raise HTTPException(status_code=404, detail=f"Page {page} out of range for document {document_id}")
+        pix = pdf[page - 1].get_pixmap(matrix=fitz.Matrix(1.8, 1.8), alpha=False)
+        png_bytes = pix.tobytes("png")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to render page image: {exc}") from exc
+
+    return StreamingResponse(
+        io.BytesIO(png_bytes),
+        media_type="image/png",
+        headers={"Content-Disposition": f"inline; filename={document_id}_page_{page}.png"},
     )
 
 

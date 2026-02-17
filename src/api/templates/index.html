@@ -31,7 +31,7 @@
                 linear-gradient(135deg, var(--bg-a), var(--bg-b));
         }
 
-        .container { max-width: 1120px; margin: 0 auto; }
+        .container { max-width: 1360px; margin: 0 auto; }
 
         .header { text-align: center; margin-bottom: 2rem; }
         .header h1 { font-size: 2.35rem; font-weight: 700; letter-spacing: .2px; }
@@ -126,6 +126,10 @@
             cursor: pointer;
             transition: .2s ease;
         }
+        .btn:disabled {
+            opacity: .6;
+            cursor: not-allowed;
+        }
 
         .btn-primary {
             color: #fff;
@@ -139,6 +143,25 @@
         }
 
         .loading-wrap { text-align: center; display: none; margin-top: 1rem; }
+        .upload-wrap {
+            text-align: center;
+            display: none;
+            margin-top: 1rem;
+            padding: .7rem;
+            border: 1px solid #dbeafe;
+            border-radius: 10px;
+            background: #eff6ff;
+            color: #1d4ed8;
+        }
+        .upload-inline {
+            margin: 0 auto .5rem;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: 2px solid #bfdbfe;
+            border-top-color: #1d4ed8;
+            animation: spin .9s linear infinite;
+        }
         .spinner {
             margin: 0 auto .8rem;
             width: 34px; height: 34px;
@@ -182,8 +205,11 @@
         .results-grid {
             margin-top: .8rem;
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr 1.7fr;
             gap: 1rem;
+        }
+        .results-bottom {
+            margin-top: 1rem;
         }
 
         .panel {
@@ -203,10 +229,99 @@
             justify-content: space-between;
             gap: .8rem;
             font-size: .92rem;
+            cursor: pointer;
+            transition: .15s ease;
+        }
+        .field-item:hover {
+            border-color: #93c5fd;
+            background: #eff6ff;
         }
 
         .field-name { font-weight: 700; color: #1e293b; }
         .field-value { color: #334155; text-align: right; word-break: break-word; }
+        .field-page {
+            margin-top: .25rem;
+            font-size: .78rem;
+            color: #1d4ed8;
+        }
+        .field-page-missing {
+            margin-top: .25rem;
+            font-size: .78rem;
+            color: #9a3412;
+        }
+        .field-confidence {
+            margin-top: .2rem;
+            font-size: .76rem;
+            color: #64748b;
+        }
+        .review-wrap {
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: .8rem;
+            background: #f8fafc;
+        }
+        .review-row {
+            display: grid;
+            grid-template-columns: 220px 1fr 90px;
+            gap: .6rem;
+            align-items: center;
+            margin-bottom: .5rem;
+        }
+        .review-key {
+            font-size: .85rem;
+            color: #1e293b;
+            font-weight: 700;
+        }
+        .review-input {
+            width: 100%;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            padding: .5rem .55rem;
+            font-size: .84rem;
+            background: #fff;
+        }
+        .review-conf {
+            font-size: .78rem;
+            color: #475569;
+            text-align: right;
+        }
+        .review-hint {
+            font-size: .75rem;
+            color: #9a3412;
+            margin-top: .2rem;
+        }
+
+        .pages-scroll {
+            height: calc(100vh - 260px);
+            min-height: 620px;
+            overflow-y: auto;
+            padding-right: .25rem;
+            display: grid;
+            gap: .8rem;
+        }
+        .page-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            background: #fff;
+            padding: .55rem;
+            scroll-margin-top: 10px;
+        }
+        .page-card-title {
+            font-size: .86rem;
+            color: #334155;
+            font-weight: 700;
+            margin-bottom: .45rem;
+        }
+        .page-card img {
+            width: 100%;
+            height: auto;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+        .page-card.active {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, .12);
+        }
 
         .status-badge {
             margin-top: .3rem;
@@ -245,6 +360,8 @@
             body { padding: 1rem; }
             .results-grid { grid-template-columns: 1fr; }
             .header h1 { font-size: 1.9rem; }
+            .review-row { grid-template-columns: 1fr; }
+            .review-conf { text-align: left; }
         }
     </style>
 </head>
@@ -272,8 +389,13 @@
 
                 <div class="controls">
                     <input id="documentType" class="input" value="license-agreement" placeholder="Document type">
-                    <button class="btn btn-secondary" type="button" onclick="triggerCurrent()">Trigger</button>
-                    <button class="btn btn-secondary" type="button" onclick="pollNow()">Status</button>
+                    <input id="existingDocId" class="input" placeholder="Existing document ID (optional)" style="min-width:280px;">
+                    <button class="btn btn-secondary" id="triggerBtn" type="button" onclick="triggerCurrent()">Trigger</button>
+                </div>
+
+                <div class="upload-wrap" id="uploadWrap">
+                    <div class="upload-inline"></div>
+                    <div id="uploadStatusText">Uploading document...</div>
                 </div>
 
                 <div class="loading-wrap" id="loadingWrap">
@@ -301,13 +423,22 @@
             <div class="card-body">
                 <div class="results-grid">
                     <div class="panel">
-                        <h3>Extracted Fields</h3>
+                        <h3>Raw Fields (Clickable)</h3>
                         <ul id="fieldsList" class="field-list"></ul>
                     </div>
                     <div class="panel">
-                        <h3>Visualization</h3>
-                        <img id="visualizationImage" class="hidden" alt="Visualization" style="max-width:100%; border-radius:8px;">
+                        <h3>Visualization (All Pages)</h3>
+                        <div id="visualizationPages" class="pages-scroll"></div>
                         <p id="noVisualization">Visualization not available.</p>
+                    </div>
+                </div>
+                <div class="results-bottom">
+                    <div class="review-wrap">
+                        <h3 style="margin-bottom:.6rem;">Normalized Fields Review</h3>
+                        <div id="normalizedEditor"></div>
+                        <div class="controls" style="justify-content:flex-start; margin-top:.5rem;">
+                            <button class="btn btn-primary" id="sendDbBtn" type="button" onclick="dummySendToDb()">Send to DB (Dummy)</button>
+                        </div>
                     </div>
                 </div>
                 <div class="controls" style="margin-top:1rem;">
@@ -324,18 +455,40 @@
         const uploadArea = document.getElementById('uploadArea');
         const fileInput = document.getElementById('fileInput');
         const loadingWrap = document.getElementById('loadingWrap');
+        const uploadWrap = document.getElementById('uploadWrap');
+        const uploadStatusText = document.getElementById('uploadStatusText');
         const chooseFileBtn = document.getElementById('chooseFileBtn');
+        const triggerBtn = document.getElementById('triggerBtn');
+        const existingDocId = document.getElementById('existingDocId');
         const errorBox = document.getElementById('errorBox');
         const debugOutput = document.getElementById('debugOutput');
         const uploadCard = document.getElementById('uploadCard');
         const resultsCard = document.getElementById('resultsCard');
         const fieldsList = document.getElementById('fieldsList');
+        const normalizedEditor = document.getElementById('normalizedEditor');
         const statusBadge = document.getElementById('statusBadge');
-        const visualizationImage = document.getElementById('visualizationImage');
+        const visualizationPages = document.getElementById('visualizationPages');
         const noVisualization = document.getElementById('noVisualization');
 
         function setDebug(value) {
             debugOutput.textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+        }
+
+        function setBusy(isBusy) {
+            fileInput.disabled = isBusy;
+            chooseFileBtn.disabled = isBusy;
+            triggerBtn.disabled = isBusy;
+            document.getElementById('documentType').disabled = isBusy;
+            existingDocId.disabled = isBusy;
+        }
+
+        function showUploadStatus(message) {
+            uploadStatusText.textContent = message;
+            uploadWrap.style.display = 'block';
+        }
+
+        function hideUploadStatus() {
+            uploadWrap.style.display = 'none';
         }
 
         function showError(msg) {
@@ -360,10 +513,193 @@
             statusBadge.className = 'status-badge status-' + status.replaceAll('_', '-');
         }
 
+        function setLoadingMessage(title, description) {
+            document.getElementById('loadingTitle').textContent = title;
+            document.getElementById('loadingDescription').textContent = description;
+        }
+
         function parseHealth(status) {
             if (!status || status === 'healthy') return 'healthy';
             if (String(status).includes('degraded')) return 'warning';
             return 'error';
+        }
+
+        function formatFieldValue(value) {
+            if (value === null || value === undefined) return '-';
+            if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+                return String(value);
+            }
+            if (Array.isArray(value)) {
+                if (!value.length) return '[]';
+                try {
+                    return value.map((v) => {
+                        if (v && typeof v === 'object') return JSON.stringify(v);
+                        return String(v);
+                    }).join('; ');
+                } catch (e) {
+                    return JSON.stringify(value);
+                }
+            }
+            if (typeof value === 'object') {
+                // Common shape for ACU normalized dates/objects.
+                if ('year' in value || 'month' in value || 'day' in value) {
+                    const y = value.year ?? 'YYYY';
+                    const m = String(value.month ?? 'MM').padStart(2, '0');
+                    const d = String(value.day ?? 'DD').padStart(2, '0');
+                    return `${y}-${m}-${d}`;
+                }
+                if ('start' in value || 'end' in value) {
+                    const start = formatFieldValue(value.start);
+                    const end = formatFieldValue(value.end);
+                    return `${start} to ${end}`;
+                }
+                try {
+                    return JSON.stringify(value);
+                } catch (e) {
+                    return '[complex object]';
+                }
+            }
+            return String(value);
+        }
+
+        function extractDisplayValue(fieldVal) {
+            if (fieldVal === null || fieldVal === undefined) return null;
+            if (typeof fieldVal !== 'object' || Array.isArray(fieldVal)) return fieldVal;
+
+            const valueKeys = [
+                'value',
+                'valueString',
+                'valueDate',
+                'valueNumber',
+                'valueInteger',
+                'valueBoolean',
+                'valueCurrency',
+                'valueObject',
+                'valueArray'
+            ];
+            for (const key of valueKeys) {
+                if (key in fieldVal && fieldVal[key] !== null && fieldVal[key] !== undefined && fieldVal[key] !== '') {
+                    return fieldVal[key];
+                }
+            }
+            return null;
+        }
+
+        function highlightPageCard(pageNum) {
+            document.querySelectorAll('.page-card').forEach((el) => el.classList.remove('active'));
+            const target = document.getElementById(`page-card-${pageNum}`);
+            if (!target) return;
+            target.classList.add('active');
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        async function renderVisualizationPages(totalPagesGuess) {
+            visualizationPages.innerHTML = '';
+            let loadedCount = 0;
+            const maxPages = Math.max(1, Math.min(totalPagesGuess || 1, 60));
+            setLoadingMessage('Preparing document preview...', `Rendering pages (0/${maxPages})`);
+
+            for (let page = 1; page <= maxPages; page++) {
+                const overlayUrl = `/api/v1/visualization/${currentDocumentId}?page=${page}&t=${Date.now()}`;
+                let pageUrl = overlayUrl;
+                let ok = false;
+                try {
+                    const resp = await fetch(overlayUrl, { method: 'GET' });
+                    if (!resp.ok) {
+                        pageUrl = `/api/v1/documents/${currentDocumentId}/page/${page}/image?t=${Date.now()}`;
+                        const rawResp = await fetch(pageUrl, { method: 'GET' });
+                        ok = rawResp.ok;
+                    } else {
+                        ok = true;
+                    }
+                } catch (e) {
+                    pageUrl = `/api/v1/documents/${currentDocumentId}/page/${page}/image?t=${Date.now()}`;
+                    try {
+                        const rawResp = await fetch(pageUrl, { method: 'GET' });
+                        ok = rawResp.ok;
+                    } catch (_) {
+                        ok = false;
+                    }
+                }
+
+                if (!ok) continue;
+                loadedCount += 1;
+                setLoadingMessage('Preparing document preview...', `Rendering pages (${loadedCount}/${maxPages})`);
+                const card = document.createElement('div');
+                card.className = 'page-card';
+                card.id = `page-card-${page}`;
+                card.innerHTML = `
+                    <div class="page-card-title">Page ${page}</div>
+                    <img src="${pageUrl}" alt="Annotated page ${page}" />
+                `;
+                visualizationPages.appendChild(card);
+            }
+
+            if (loadedCount > 0) {
+                noVisualization.classList.add('hidden');
+            } else {
+                noVisualization.classList.remove('hidden');
+            }
+        }
+
+        async function detectTotalPagesFromApi(maxProbe = 80) {
+            let count = 0;
+            for (let page = 1; page <= maxProbe; page++) {
+                const testUrl = `/api/v1/documents/${currentDocumentId}/page/${page}/image?t=${Date.now()}`;
+                try {
+                    const resp = await fetch(testUrl, { method: 'GET' });
+                    if (!resp.ok) break;
+                    count = page;
+                } catch (e) {
+                    break;
+                }
+            }
+            return Math.max(1, count);
+        }
+
+        function buildNormalizedEditor(normalizedFields, rawFields) {
+            normalizedEditor.innerHTML = '';
+            const keys = Object.keys(normalizedFields);
+            if (!keys.length) {
+                normalizedEditor.innerHTML = '<div class="review-key">No normalized fields detected.</div>';
+                return;
+            }
+            keys.forEach((key) => {
+                const val = normalizedFields[key];
+                let value = extractDisplayValue(val);
+                let usedRawFallback = false;
+                if (value === null || value === undefined || value === '') {
+                    const rawKey = key.replace(/_normalized$/, '_raw');
+                    if (rawFields && rawKey in rawFields) {
+                        const rawVal = extractDisplayValue(rawFields[rawKey]);
+                        if (rawVal !== null && rawVal !== undefined && rawVal !== '') {
+                            value = rawVal;
+                            usedRawFallback = true;
+                        }
+                    }
+                }
+                const confidence = (val && typeof val === 'object' && typeof val.confidence === 'number') ? val.confidence : null;
+                const row = document.createElement('div');
+                row.className = 'review-row';
+                row.innerHTML = `
+                    <div class="review-key">${key}</div>
+                    <div>
+                        <input class="review-input" data-field-key="${key}" value="${String(formatFieldValue(value ?? '')).replaceAll('"', '&quot;')}" />
+                        ${usedRawFallback ? `<div class="review-hint">No normalized value returned; prefilled from raw field.</div>` : ''}
+                    </div>
+                    <div class="review-conf">${confidence !== null ? (confidence * 100).toFixed(1) + '%' : '-'}</div>
+                `;
+                normalizedEditor.appendChild(row);
+            });
+        }
+
+        function dummySendToDb() {
+            const payload = {};
+            normalizedEditor.querySelectorAll('input[data-field-key]').forEach((el) => {
+                payload[el.getAttribute('data-field-key')] = el.value;
+            });
+            setDebug({ action: 'send_to_db_dummy', document_id: currentDocumentId, normalized_fields: payload });
+            alert('Dummy action: normalized fields prepared for DB. Check debug panel for payload.');
         }
 
         async function checkServiceStatus() {
@@ -394,7 +730,9 @@
 
         async function uploadOnly(file) {
             hideError();
+            setBusy(true);
             loadingWrap.style.display = 'none';
+            showUploadStatus('Uploading document...');
             setStep('step-upload', 'active');
             setStep('step-trigger', null);
             setStep('step-acu', null);
@@ -404,45 +742,58 @@
             formData.append('file', file);
             formData.append('document_type', document.getElementById('documentType').value || 'general');
 
-            const uploadResp = await fetch('/api/v1/upload', { method: 'POST', body: formData });
-            const uploadJson = await uploadResp.json();
-            setDebug(uploadJson);
+            try {
+                const uploadResp = await fetch('/api/v1/upload', { method: 'POST', body: formData });
+                const uploadJson = await uploadResp.json();
+                setDebug(uploadJson);
 
-            if (!uploadResp.ok) {
-                loadingWrap.style.display = 'none';
-                throw new Error(uploadJson.detail || 'Upload failed');
+                if (!uploadResp.ok) {
+                    loadingWrap.style.display = 'none';
+                    throw new Error(uploadJson.detail || 'Upload failed');
+                }
+
+                currentDocumentId = uploadJson.document_id;
+                setStep('step-upload', 'done');
+                showUploadStatus('Upload complete. Click Trigger to start processing.');
+                setDebug({ upload: uploadJson, next_step: "Click Trigger to start processing" });
+            } finally {
+                setBusy(false);
             }
-
-            currentDocumentId = uploadJson.document_id;
-            setStep('step-upload', 'done');
-            setDebug({ upload: uploadJson, next_step: "Click Trigger to start processing" });
-        }
-
-        async function pollNow() {
-            if (!currentDocumentId) {
-                showError('Upload a document first.');
-                return;
-            }
-            await fetchStatus();
         }
 
         async function triggerCurrent() {
+            const manualDocId = existingDocId.value.trim();
+            const hasUploadedDoc = !!currentDocumentId;
+            if (!hasUploadedDoc && manualDocId) {
+                currentDocumentId = manualDocId;
+            }
             if (!currentDocumentId) {
-                showError('Upload a document first.');
+                showError('Upload a document first or provide an existing document ID.');
                 return;
             }
+            setBusy(true);
             setStep('step-trigger', 'active');
-            const res = await fetch(`/api/v1/documents/${currentDocumentId}/trigger`, { method: 'POST' });
-            const json = await res.json();
-            setDebug(json);
-            if (!res.ok) {
-                showError(json.detail || 'Trigger failed.');
-                setStep('step-trigger', null);
-                return;
+            const reuseExisting = !hasUploadedDoc && !!manualDocId;
+            showUploadStatus(reuseExisting ? 'Reusing existing ACU result...' : 'Triggering processing...');
+            try {
+                const triggerUrl = reuseExisting
+                    ? `/api/v1/documents/${currentDocumentId}/trigger?reuse_existing=true`
+                    : `/api/v1/documents/${currentDocumentId}/trigger`;
+                const res = await fetch(triggerUrl, { method: 'POST' });
+                const json = await res.json();
+                setDebug(json);
+                if (!res.ok) {
+                    showError(json.detail || 'Trigger failed.');
+                    setStep('step-trigger', null);
+                    return;
+                }
+                setStep('step-trigger', 'done');
+                hideUploadStatus();
+                loadingWrap.style.display = 'block';
+                startPolling();
+            } finally {
+                setBusy(false);
             }
-            setStep('step-trigger', 'done');
-            loadingWrap.style.display = 'block';
-            startPolling();
         }
 
         function startPolling() {
@@ -496,49 +847,70 @@
         }
 
         async function loadResults() {
+            loadingWrap.style.display = 'block';
+            setLoadingMessage('Finalizing extraction...', 'Loading fields and preparing document pages.');
             const res = await fetch(`/api/v1/results/${currentDocumentId}`);
             const data = await res.json();
             setDebug(data);
             if (!res.ok) {
+                loadingWrap.style.display = 'none';
                 showError(data.detail || 'Failed to load results');
                 return;
             }
 
             setBadge(data.status || 'completed');
             fieldsList.innerHTML = '';
+            normalizedEditor.innerHTML = '';
 
             const fields = data.extracted_fields || {};
             const keys = Object.keys(fields);
+            const rawKeys = keys.filter((k) => k.endsWith('_raw'));
+            const normalizedKeys = keys.filter((k) => k.endsWith('_normalized'));
+            const rawFields = {};
+            const normalizedFields = {};
+            rawKeys.forEach((k) => { rawFields[k] = fields[k]; });
+            normalizedKeys.forEach((k) => { normalizedFields[k] = fields[k]; });
 
-            if (!keys.length) {
+            if (!rawKeys.length) {
                 const item = document.createElement('li');
                 item.className = 'field-item';
-                item.innerHTML = '<span class="field-name">Info</span><span class="field-value">No fields found</span>';
+                item.innerHTML = '<span class="field-name">Info</span><span class="field-value">No raw fields found</span>';
                 fieldsList.appendChild(item);
             } else {
-                keys.forEach((key) => {
-                    const val = fields[key];
+                rawKeys.forEach((key) => {
+                    const val = rawFields[key];
                     const text = (val && typeof val === 'object' && 'value' in val) ? val.value : val;
+                    const renderedValue = formatFieldValue(text);
+                    const pages = (val && typeof val === 'object' && Array.isArray(val.pages)) ? val.pages : [];
+                    const firstPage = pages.length ? pages[0] : null;
+                    const confidence = (val && typeof val === 'object' && typeof val.confidence === 'number') ? val.confidence : null;
                     const item = document.createElement('li');
                     item.className = 'field-item';
-                    item.innerHTML = `<span class="field-name">${key}</span><span class="field-value">${String(text)}</span>`;
+                    item.innerHTML = `
+                        <div>
+                            <div class="field-name">${key}</div>
+                            ${firstPage ? `<div class="field-page">Page ${firstPage}</div>` : `<div class="field-page-missing">No source page found in PDF</div>`}
+                            ${confidence !== null ? `<div class="field-confidence">Confidence: ${(confidence * 100).toFixed(1)}%</div>` : ''}
+                        </div>
+                        <span class="field-value">${renderedValue}</span>
+                    `;
+                    if (firstPage) {
+                        item.addEventListener('click', () => highlightPageCard(firstPage));
+                    }
                     fieldsList.appendChild(item);
                 });
             }
 
-            const vizUrl = `/api/v1/visualization/${currentDocumentId}?page=1&t=${Date.now()}`;
-            visualizationImage.onload = () => {
-                visualizationImage.classList.remove('hidden');
-                noVisualization.classList.add('hidden');
-            };
-            visualizationImage.onerror = () => {
-                visualizationImage.classList.add('hidden');
-                noVisualization.classList.remove('hidden');
-            };
-            visualizationImage.src = vizUrl;
+            buildNormalizedEditor(normalizedFields, rawFields);
+
+            // Robust total-page detection from API so all pages render even when ACU JSON shape varies.
+            const totalPages = await detectTotalPagesFromApi();
+            setLoadingMessage('Finalizing extraction...', `Detected ${totalPages} page(s). Building viewer...`);
+            await renderVisualizationPages(totalPages);
 
             uploadCard.classList.add('hidden');
             resultsCard.classList.remove('hidden');
+            loadingWrap.style.display = 'none';
         }
 
         function resetForm() {
@@ -546,6 +918,8 @@
             if (statusTimer) clearInterval(statusTimer);
             hideError();
             setDebug('Ready.');
+            hideUploadStatus();
+            setBusy(false);
             setStep('step-upload', null);
             setStep('step-trigger', null);
             setStep('step-acu', null);

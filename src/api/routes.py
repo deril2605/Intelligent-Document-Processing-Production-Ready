@@ -5,12 +5,14 @@ import json
 import logging
 import os
 import tempfile
+import io
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+import fitz
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 
 from .models import (
@@ -24,6 +26,7 @@ from ..async_processing import AsyncDocumentProcessor
 from ..celery_app import celery_app
 from ..config import AppConfig
 from ..storage.storage import Stage, get_storage
+from ..visualization import build_acu_annotated_pages
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -131,8 +134,72 @@ async def upload_document(
 
 @router.post("/documents/{document_id}/trigger")
 @router.post("/trigger/{document_id}")
-def trigger_document_processing(document_id: str) -> Dict[str, str]:
+def trigger_document_processing(
+    document_id: str,
+    reuse_existing: bool = Query(
+        False,
+        description="If true, reuse existing ACU blob/result and skip a new ACU run.",
+    ),
+) -> Dict[str, str]:
     proc = _new_processor()
+
+    if reuse_existing:
+        doc = proc.dms_service.get_document(document_id=document_id)
+        if not doc:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        existing_blob = doc.get("acu_result_blob_path")
+        if not existing_blob:
+            raise HTTPException(
+                status_code=400,
+                detail="No existing ACU result found for this document; cannot reuse.",
+            )
+
+        # Keep DB status consistent so UI polling resolves to completed.
+        try:
+            proc.dms_service.update_textextraction_status(document_id=document_id, status="completed")
+        except Exception:
+            logger.warning("Could not set text_extraction_status=completed for %s", document_id)
+        try:
+            proc.dms_service.mark_processing_done(document_id=document_id)
+        except Exception:
+            logger.warning("Could not set processing_status=done for %s", document_id)
+
+        # Best effort: generate annotated overlays from existing ACU blob so UI can show bounding boxes
+        # without running a new ACU extraction.
+        try:
+            candidate_containers = [app_config.azure.storage.container_name, "documents", "credit-ocr"]
+            deduped_containers = list(dict.fromkeys(candidate_containers))
+            acu_blob_bytes = None
+            for container_name in deduped_containers:
+                acu_blob_bytes = proc.dms_service.storage_client.download_bytes(
+                    container=container_name,
+                    blob_name=existing_blob,
+                )
+                if acu_blob_bytes:
+                    break
+
+            pdf_data = proc.dms_service.download_document(document_id=document_id)
+            if acu_blob_bytes and pdf_data:
+                parsed = json.loads(acu_blob_bytes.decode("utf-8"))
+                acu_result = parsed.get("acu_result", parsed)
+                annotated_pages = build_acu_annotated_pages(pdf_data=pdf_data, acu_result=acu_result)
+                for page_num, image_bytes in annotated_pages.items():
+                    proc.dms_service.storage_client.upload_bytes(
+                        container="documents",
+                        blob_name=f"annotated/{document_id}_page_{page_num}.png",
+                        data=image_bytes,
+                        content_type="image/png",
+                    )
+        except Exception as exc:
+            logger.warning("Reuse mode overlay generation failed for %s: %s", document_id, exc)
+
+        return {
+            "document_id": document_id,
+            "task_id": "existing-data",
+            "status": "reused",
+        }
+
     task_id = proc.trigger_processing(document_id=document_id)
     if not task_id:
         raise HTTPException(status_code=400, detail="Could not trigger processing for document")
@@ -168,26 +235,48 @@ def _extract_fields_from_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(acu_result, dict):
         return {}
 
+    def _pages_from_source(source_value: Any) -> List[int]:
+        if not isinstance(source_value, str):
+            return []
+        pages: List[int] = []
+        for chunk in source_value.split("D("):
+            if not chunk:
+                continue
+            head = chunk.split(")", 1)[0]
+            first = head.split(",", 1)[0].strip()
+            try:
+                page_num = int(float(first))
+            except Exception:
+                continue
+            if page_num not in pages:
+                pages.append(page_num)
+        return pages
+
     def _coerce_field_value(field_payload: Any) -> Any:
         if not isinstance(field_payload, dict):
             return field_payload
+
+        pages = _pages_from_source(field_payload.get("source"))
 
         for key in ("valueString", "valueDate", "valueNumber", "valueInteger", "valueBoolean", "valueCurrency"):
             if key in field_payload:
                 return {
                     "value": field_payload[key],
                     "confidence": field_payload.get("confidence"),
+                    "pages": pages,
                 }
 
         if "valueObject" in field_payload:
             return {
                 "value": field_payload["valueObject"],
                 "confidence": field_payload.get("confidence"),
+                "pages": pages,
             }
         if "valueArray" in field_payload:
             return {
                 "value": field_payload["valueArray"],
                 "confidence": field_payload.get("confidence"),
+                "pages": pages,
             }
 
         return field_payload
@@ -268,12 +357,81 @@ def get_document_results(document_id: str) -> DocumentResultsResponse:
 @router.get("/documents/{document_id}/visualization")
 def get_document_visualization(document_id: str, page: int = 1) -> StreamingResponse:
     image = get_storage().download_blob(document_id, Stage.ANNOTATED, f"_page_{page}.png")
+    if image:
+        return StreamingResponse(
+            BytesIO(image),
+            media_type="image/png",
+            headers={"Content-Disposition": f"inline; filename=visualization_{document_id}_page_{page}.png"},
+        )
+
+    # Fallback: build overlays from existing ACU blob + raw PDF on demand.
+    try:
+        proc = _new_processor()
+        doc = proc.dms_service.get_document(document_id=document_id) or {}
+        acu_blob_path = doc.get("acu_result_blob_path")
+        if acu_blob_path:
+            candidate_containers = [app_config.azure.storage.container_name, "documents", "credit-ocr"]
+            deduped_containers = list(dict.fromkeys(candidate_containers))
+            acu_blob_bytes = None
+            for container_name in deduped_containers:
+                acu_blob_bytes = proc.dms_service.storage_client.download_bytes(
+                    container=container_name,
+                    blob_name=acu_blob_path,
+                )
+                if acu_blob_bytes:
+                    break
+
+            pdf_data = proc.dms_service.download_document(document_id=document_id)
+            if acu_blob_bytes and pdf_data:
+                parsed = json.loads(acu_blob_bytes.decode("utf-8"))
+                acu_result = parsed.get("acu_result", parsed)
+                annotated_pages = build_acu_annotated_pages(pdf_data=pdf_data, acu_result=acu_result)
+                for page_num, image_bytes in annotated_pages.items():
+                    proc.dms_service.storage_client.upload_bytes(
+                        container="documents",
+                        blob_name=f"annotated/{document_id}_page_{page_num}.png",
+                        data=image_bytes,
+                        content_type="image/png",
+                    )
+                image = annotated_pages.get(page)
+    except Exception as exc:
+        logger.warning("On-demand visualization build failed for %s page %s: %s", document_id, page, exc)
+
     if not image:
         raise HTTPException(status_code=404, detail=f"Visualization not found for document {document_id}, page {page}")
     return StreamingResponse(
         BytesIO(image),
         media_type="image/png",
         headers={"Content-Disposition": f"inline; filename=visualization_{document_id}_page_{page}.png"},
+    )
+
+
+@router.get("/documents/{document_id}/page/{page}/image")
+@router.get("/page-image/{document_id}")
+def get_document_page_image(document_id: str, page: int = 1) -> StreamingResponse:
+    if page < 1:
+        raise HTTPException(status_code=400, detail="Page must be >= 1")
+
+    proc = _new_processor()
+    pdf_data = proc.dms_service.download_document(document_id=document_id)
+    if not pdf_data:
+        raise HTTPException(status_code=404, detail=f"Raw document not found for {document_id}")
+
+    try:
+        pdf = fitz.open(stream=pdf_data, filetype="pdf")
+        if page > len(pdf):
+            raise HTTPException(status_code=404, detail=f"Page {page} out of range for document {document_id}")
+        pix = pdf[page - 1].get_pixmap(matrix=fitz.Matrix(1.8, 1.8), alpha=False)
+        png_bytes = pix.tobytes("png")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to render page image: {exc}") from exc
+
+    return StreamingResponse(
+        io.BytesIO(png_bytes),
+        media_type="image/png",
+        headers={"Content-Disposition": f"inline; filename={document_id}_page_{page}.png"},
     )
 
 
