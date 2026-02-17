@@ -78,8 +78,10 @@ async def process_document_with_acu(
     if dms_service is None:
         raise ValueError("dms_service is required to persist ACU output and update DB.")
 
+    # Project standard: keep all stages under the single "documents" container.
+    target_container = "documents"
     dms_service.storage_client.upload_bytes(
-        container=cfg.azure.storage.container_name,
+        container=target_container,
         blob_name=acu_result_blob_path,
         data=_json_bytes(
             {

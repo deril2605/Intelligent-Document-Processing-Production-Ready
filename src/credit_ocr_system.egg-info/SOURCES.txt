@@ -6,7 +6,10 @@ src/acu/client.py
 src/acu/config.py
 src/acu/parse.py
 src/api/__init__.py
+src/api/config.py
 src/api/main.py
+src/api/models.py
+src/api/routes.py
 src/config/__init__.py
 src/config/system.py
 src/credit_ocr_system/__init__.py

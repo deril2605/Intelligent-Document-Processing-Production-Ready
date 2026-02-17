@@ -1,132 +1,99 @@
-from __future__ import annotations
+"""
+Main FastAPI application for intelligent document processing.
+"""
 
-import asyncio
 import logging
-import os
-import tempfile
-from pathlib import Path
-from typing import Any, Dict
+from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.templating import Jinja2Templates
 
-from src.async_processing import AsyncDocumentProcessor
-from src.config import AppConfig
+from .config import ApiConfig
+from .routes import router
+from ..storage.storage import get_storage
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Intelligent Document Processing API", version="1.0.0")
-cfg = AppConfig()
 
-try:
-    processor = AsyncDocumentProcessor()
-    _init_error: str | None = None
-except Exception as exc:
-    processor = None
-    _init_error = str(exc)
-    logger.exception("Failed to initialize AsyncDocumentProcessor")
-
-
-def _upload_and_read_status(*, payload: bytes, filename: str, document_type: str) -> Dict[str, Any]:
-    # Create a fresh service instance for the request to avoid stale/shared DB connection issues.
-    local_processor = AsyncDocumentProcessor()
-    suffix = os.path.splitext(filename)[1] or ".bin"
-
-    temp_path = None
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("Starting Intelligent Document Processing API")
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(payload)
-            temp_path = tmp.name
-
-        document_id = local_processor.dms_service.upload_document(
-            file_path=Path(temp_path),
-            document_type=document_type,
-            source_filename=filename,
-            create_job_if_ready=False,
-        )
-        status = local_processor.get_processing_status(document_id=document_id)
-        return {
-            "document_id": document_id,
-            "source_filename": filename,
-            "document_type": document_type,
-            "status": status,
-        }
-    finally:
-        if temp_path and os.path.exists(temp_path):
-            try:
-                os.remove(temp_path)
-            except Exception:
-                logger.warning("Failed to delete temp file: %s", temp_path)
-
-
-@app.get("/api/v1/health")
-def health() -> Dict[str, Any]:
-    if _init_error is not None:
-        return {
-            "status": "degraded",
-            "api_host": cfg.api.host,
-            "api_port": cfg.api.port,
-            "error": _init_error,
-        }
-    return {
-        "status": "healthy",
-        "api_host": cfg.api.host,
-        "api_port": cfg.api.port,
-    }
-
-
-@app.get("/")
-def root() -> Dict[str, Any]:
-    return {"service": "intelligent-document-processing-api", "status": "ok"}
-
-
-@app.post("/api/v1/upload")
-async def upload_document(
-    file: UploadFile = File(...),
-    document_type: str = Form(...),
-) -> Dict[str, Any]:
-    if processor is None:
-        raise HTTPException(status_code=500, detail=f"Processor unavailable: {_init_error}")
-
-    filename = file.filename or "uploaded.bin"
-    payload = await file.read()
-    if not payload:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty")
-
-    try:
-        return await asyncio.wait_for(
-            asyncio.to_thread(
-                _upload_and_read_status,
-                payload=payload,
-                filename=filename,
-                document_type=document_type,
-            ),
-            timeout=55,
-        )
-    except asyncio.TimeoutError:
-        raise HTTPException(status_code=504, detail="Upload timed out while writing to storage")
+        get_storage().ensure_all_containers_ready()
+        logger.info("Storage container initialized")
     except Exception as exc:
-        logger.exception("Upload failed")
-        raise HTTPException(status_code=500, detail=f"Upload failed: {exc}")
+        logger.error("Storage initialization failed: %s", exc)
+    yield
+    logger.info("Shutting down Intelligent Document Processing API")
 
 
-@app.post("/api/v1/documents/{document_id}/trigger")
-def trigger_processing(document_id: str) -> Dict[str, Any]:
-    if processor is None:
-        raise HTTPException(status_code=500, detail=f"Processor unavailable: {_init_error}")
+api_config = ApiConfig()
+templates = Jinja2Templates(directory="src/api/templates")
 
-    task_id = processor.trigger_processing(document_id=document_id)
-    if not task_id:
-        raise HTTPException(status_code=400, detail="Could not trigger processing for document")
+app = FastAPI(
+    title="Intelligent Document Processing API",
+    description="Upload, trigger, and monitor asynchronous ACU document processing.",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    debug=api_config.debug,
+    lifespan=lifespan,
+)
 
-    return {"document_id": document_id, "task_id": task_id, "status": "queued"}
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=api_config.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(router, prefix="/api/v1", tags=["documents"])
 
 
-@app.get("/api/v1/documents/{document_id}/status")
-def get_status(document_id: str) -> Dict[str, Any]:
-    if processor is None:
-        raise HTTPException(status_code=500, detail=f"Processor unavailable: {_init_error}")
+@app.get("/", response_class=HTMLResponse)
+async def root(request: Request):
+    return templates.TemplateResponse(request, "index.html")
 
-    status = processor.get_processing_status(document_id=document_id)
-    if "error" in status:
-        raise HTTPException(status_code=404, detail=status["error"])
-    return status
+
+@app.exception_handler(404)
+async def not_found_handler(request: Request, exc):
+    return JSONResponse(
+        status_code=404,
+        content={
+            "error": "Not Found",
+            "message": "The requested resource was not found",
+            "detail": f"Path: {request.url.path}",
+        },
+    )
+
+
+@app.exception_handler(500)
+async def internal_error_handler(request: Request, exc):
+    logger.error("Internal server error: %s", exc)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal Server Error",
+            "message": "An internal server error occurred",
+            "detail": str(exc) if api_config.debug else None,
+        },
+    )
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(
+        "src.api.main:app",
+        host=api_config.host,
+        port=api_config.port,
+        reload=api_config.reload and not api_config.is_production,
+        log_level="debug" if api_config.debug else "info",
+    )

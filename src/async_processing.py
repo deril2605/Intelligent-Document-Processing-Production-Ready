@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from typing import Optional, Dict, Any
 
 import psycopg2
@@ -20,6 +21,8 @@ load_dotenv()
 
 class AsyncDocumentProcessor:
     """Service for triggering async document processing (YOUR stack: Azure Blob cloud + Postgres + ACU)."""
+    _container_ready: bool = False
+    _container_lock = threading.Lock()
 
     def __init__(self) -> None:
         # --- Azure Blob (cloud) ---
@@ -29,12 +32,16 @@ class AsyncDocumentProcessor:
 
         blob_service_client = BlobServiceClient.from_connection_string(conn_str)
 
-        # Optional: ensure container exists (safe to ignore errors if it already exists)
+        # Ensure container exists once per process (avoid repeated 409 ContainerAlreadyExists noise).
         container = os.getenv("AZURE_BLOB_CONTAINER", "documents")
-        try:
-            blob_service_client.create_container(container)
-        except Exception:
-            pass
+        if not AsyncDocumentProcessor._container_ready:
+            with AsyncDocumentProcessor._container_lock:
+                if not AsyncDocumentProcessor._container_ready:
+                    try:
+                        blob_service_client.create_container(container)
+                    except Exception:
+                        pass
+                    AsyncDocumentProcessor._container_ready = True
 
         # --- Postgres ---
         pg_conn = psycopg2.connect(
