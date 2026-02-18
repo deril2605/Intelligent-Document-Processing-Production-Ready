@@ -25,6 +25,9 @@ src/dms/interfaces.py
 src/dms/service.py
 src/integration/__init__.py
 src/integration/pipeline.py
+src/observability/__init__.py
+src/observability/logging.py
+src/observability/otel.py
 src/scripts/__init__.py
 src/scripts/run_pipeline.py
 src/storage/__init__.py

@@ -314,9 +314,10 @@
         }
 
         .pages-scroll {
-            height: calc(100vh - 260px);
+            max-height: calc(100vh - 260px);
             min-height: 620px;
             overflow-y: auto;
+            overflow-x: hidden;
             padding-right: .25rem;
             display: grid;
             gap: .8rem;
@@ -327,7 +328,7 @@
             background: #fff;
             padding: .55rem;
             scroll-margin-top: 10px;
-            overflow: auto;
+            overflow: visible;
         }
         .page-card-title {
             font-size: .86rem;
@@ -336,7 +337,9 @@
             margin-bottom: .45rem;
         }
         .page-card img {
+            display: block;
             width: 100%;
+            max-width: 100%;
             height: auto;
             border-radius: 8px;
             border: 1px solid #e2e8f0;

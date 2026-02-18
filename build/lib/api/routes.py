@@ -12,8 +12,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import fitz
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
+from opentelemetry import trace
 
 from .models import (
     DocumentResultsResponse,
@@ -26,10 +27,22 @@ from ..async_processing import AsyncDocumentProcessor
 from ..celery_app import celery_app
 from ..config import AppConfig
 from ..storage.storage import Stage, get_storage
+from ..visualization import build_acu_annotated_pages
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 app_config = AppConfig()
+tracer = trace.get_tracer(__name__)
+
+
+def _set_span_attrs(attributes: Dict[str, Any]) -> None:
+    span = trace.get_current_span()
+    if span is None:
+        return
+    for key, value in attributes.items():
+        if value is None:
+            continue
+        span.set_attribute(key, value)
 
 
 def _latest_job(extraction_jobs: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -105,6 +118,7 @@ async def upload_document(
     file: UploadFile = File(...),
     document_type: str = Form("general"),
 ) -> DocumentUploadResponse:
+    _set_span_attrs({"idp.operation": "upload_document", "idp.document_type": document_type})
     filename = file.filename or "uploaded.bin"
     payload = await file.read()
     if not payload:
@@ -133,8 +147,79 @@ async def upload_document(
 
 @router.post("/documents/{document_id}/trigger")
 @router.post("/trigger/{document_id}")
-def trigger_document_processing(document_id: str) -> Dict[str, str]:
+def trigger_document_processing(
+    document_id: str,
+    reuse_existing: bool = Query(
+        False,
+        description="If true, reuse existing ACU blob/result and skip a new ACU run.",
+    ),
+) -> Dict[str, str]:
+    _set_span_attrs(
+        {
+            "idp.operation": "trigger_document_processing",
+            "idp.document_id": document_id,
+            "idp.reuse_existing": reuse_existing,
+        }
+    )
     proc = _new_processor()
+
+    if reuse_existing:
+        doc = proc.dms_service.get_document(document_id=document_id)
+        if not doc:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        existing_blob = doc.get("acu_result_blob_path")
+        if not existing_blob:
+            raise HTTPException(
+                status_code=400,
+                detail="No existing ACU result found for this document; cannot reuse.",
+            )
+
+        # Keep DB status consistent so UI polling resolves to completed.
+        try:
+            proc.dms_service.update_textextraction_status(document_id=document_id, status="completed")
+        except Exception:
+            logger.warning("Could not set text_extraction_status=completed for %s", document_id)
+        try:
+            proc.dms_service.mark_processing_done(document_id=document_id)
+        except Exception:
+            logger.warning("Could not set processing_status=done for %s", document_id)
+
+        # Best effort: generate annotated overlays from existing ACU blob so UI can show bounding boxes
+        # without running a new ACU extraction.
+        try:
+            candidate_containers = [app_config.azure.storage.container_name, "documents", "credit-ocr"]
+            deduped_containers = list(dict.fromkeys(candidate_containers))
+            acu_blob_bytes = None
+            for container_name in deduped_containers:
+                acu_blob_bytes = proc.dms_service.storage_client.download_bytes(
+                    container=container_name,
+                    blob_name=existing_blob,
+                )
+                if acu_blob_bytes:
+                    break
+
+            pdf_data = proc.dms_service.download_document(document_id=document_id)
+            if acu_blob_bytes and pdf_data:
+                parsed = json.loads(acu_blob_bytes.decode("utf-8"))
+                acu_result = parsed.get("acu_result", parsed)
+                annotated_pages = build_acu_annotated_pages(pdf_data=pdf_data, acu_result=acu_result)
+                for page_num, image_bytes in annotated_pages.items():
+                    proc.dms_service.storage_client.upload_bytes(
+                        container="documents",
+                        blob_name=f"annotated/{document_id}_page_{page_num}.png",
+                        data=image_bytes,
+                        content_type="image/png",
+                    )
+        except Exception as exc:
+            logger.warning("Reuse mode overlay generation failed for %s: %s", document_id, exc)
+
+        return {
+            "document_id": document_id,
+            "task_id": "existing-data",
+            "status": "reused",
+        }
+
     task_id = proc.trigger_processing(document_id=document_id)
     if not task_id:
         raise HTTPException(status_code=400, detail="Could not trigger processing for document")
@@ -144,6 +229,7 @@ def trigger_document_processing(document_id: str) -> Dict[str, str]:
 @router.get("/documents/{document_id}/status", response_model=DocumentStatusResponse)
 @router.get("/status/{document_id}", response_model=DocumentStatusResponse)
 def get_document_status(document_id: str) -> DocumentStatusResponse:
+    _set_span_attrs({"idp.operation": "get_document_status", "idp.document_id": document_id})
     proc = _new_processor()
     raw = proc.get_processing_status(document_id=document_id)
     if "error" in raw:
@@ -239,6 +325,7 @@ def _extract_fields_from_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
 @router.get("/results/{document_id}", response_model=DocumentResultsResponse)
 @router.get("/documents/{document_id}/results", response_model=DocumentResultsResponse)
 def get_document_results(document_id: str) -> DocumentResultsResponse:
+    _set_span_attrs({"idp.operation": "get_document_results", "idp.document_id": document_id})
     proc = _new_processor()
     raw = proc.get_processing_status(document_id=document_id)
     if "error" in raw:
@@ -291,7 +378,54 @@ def get_document_results(document_id: str) -> DocumentResultsResponse:
 @router.get("/visualization/{document_id}")
 @router.get("/documents/{document_id}/visualization")
 def get_document_visualization(document_id: str, page: int = 1) -> StreamingResponse:
+    _set_span_attrs(
+        {
+            "idp.operation": "get_document_visualization",
+            "idp.document_id": document_id,
+            "idp.page_number": page,
+        }
+    )
     image = get_storage().download_blob(document_id, Stage.ANNOTATED, f"_page_{page}.png")
+    if image:
+        return StreamingResponse(
+            BytesIO(image),
+            media_type="image/png",
+            headers={"Content-Disposition": f"inline; filename=visualization_{document_id}_page_{page}.png"},
+        )
+
+    # Fallback: build overlays from existing ACU blob + raw PDF on demand.
+    try:
+        proc = _new_processor()
+        doc = proc.dms_service.get_document(document_id=document_id) or {}
+        acu_blob_path = doc.get("acu_result_blob_path")
+        if acu_blob_path:
+            candidate_containers = [app_config.azure.storage.container_name, "documents", "credit-ocr"]
+            deduped_containers = list(dict.fromkeys(candidate_containers))
+            acu_blob_bytes = None
+            for container_name in deduped_containers:
+                acu_blob_bytes = proc.dms_service.storage_client.download_bytes(
+                    container=container_name,
+                    blob_name=acu_blob_path,
+                )
+                if acu_blob_bytes:
+                    break
+
+            pdf_data = proc.dms_service.download_document(document_id=document_id)
+            if acu_blob_bytes and pdf_data:
+                parsed = json.loads(acu_blob_bytes.decode("utf-8"))
+                acu_result = parsed.get("acu_result", parsed)
+                annotated_pages = build_acu_annotated_pages(pdf_data=pdf_data, acu_result=acu_result)
+                for page_num, image_bytes in annotated_pages.items():
+                    proc.dms_service.storage_client.upload_bytes(
+                        container="documents",
+                        blob_name=f"annotated/{document_id}_page_{page_num}.png",
+                        data=image_bytes,
+                        content_type="image/png",
+                    )
+                image = annotated_pages.get(page)
+    except Exception as exc:
+        logger.warning("On-demand visualization build failed for %s page %s: %s", document_id, page, exc)
+
     if not image:
         raise HTTPException(status_code=404, detail=f"Visualization not found for document {document_id}, page {page}")
     return StreamingResponse(
@@ -304,6 +438,13 @@ def get_document_visualization(document_id: str, page: int = 1) -> StreamingResp
 @router.get("/documents/{document_id}/page/{page}/image")
 @router.get("/page-image/{document_id}")
 def get_document_page_image(document_id: str, page: int = 1) -> StreamingResponse:
+    _set_span_attrs(
+        {
+            "idp.operation": "get_document_page_image",
+            "idp.document_id": document_id,
+            "idp.page_number": page,
+        }
+    )
     if page < 1:
         raise HTTPException(status_code=400, detail="Page must be >= 1")
 
@@ -332,6 +473,7 @@ def get_document_page_image(document_id: str, page: int = 1) -> StreamingRespons
 
 @router.get("/documents")
 def list_documents(limit: int = 50, offset: int = 0) -> List[DocumentStatusResponse]:
+    _set_span_attrs({"idp.operation": "list_documents", "idp.limit": limit, "idp.offset": offset})
     proc = _new_processor()
     docs = proc.dms_service.list_documents(limit=limit, offset=offset)
 
@@ -359,6 +501,7 @@ def list_documents(limit: int = 50, offset: int = 0) -> List[DocumentStatusRespo
 
 @router.get("/health", response_model=HealthCheckResponse)
 def health_check() -> HealthCheckResponse:
+    _set_span_attrs({"idp.operation": "health_check"})
     services: Dict[str, str] = {}
     overall = "healthy"
 

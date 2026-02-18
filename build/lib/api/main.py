@@ -13,6 +13,7 @@ from fastapi.templating import Jinja2Templates
 from .config import ApiConfig
 from .routes import router
 from ..storage.storage import get_storage
+from ..observability import setup_observability
 
 logging.basicConfig(
     level=logging.INFO,
@@ -45,6 +46,7 @@ app = FastAPI(
     debug=api_config.debug,
     lifespan=lifespan,
 )
+setup_observability(app)
 
 app.add_middleware(
     CORSMiddleware,

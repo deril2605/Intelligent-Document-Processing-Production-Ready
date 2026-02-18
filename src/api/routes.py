@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 import fitz
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
+from opentelemetry import trace
 
 from .models import (
     DocumentResultsResponse,
@@ -31,6 +32,17 @@ from ..visualization import build_acu_annotated_pages
 logger = logging.getLogger(__name__)
 router = APIRouter()
 app_config = AppConfig()
+tracer = trace.get_tracer(__name__)
+
+
+def _set_span_attrs(attributes: Dict[str, Any]) -> None:
+    span = trace.get_current_span()
+    if span is None:
+        return
+    for key, value in attributes.items():
+        if value is None:
+            continue
+        span.set_attribute(key, value)
 
 
 def _latest_job(extraction_jobs: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -106,6 +118,7 @@ async def upload_document(
     file: UploadFile = File(...),
     document_type: str = Form("general"),
 ) -> DocumentUploadResponse:
+    _set_span_attrs({"idp.operation": "upload_document", "idp.document_type": document_type})
     filename = file.filename or "uploaded.bin"
     payload = await file.read()
     if not payload:
@@ -141,6 +154,13 @@ def trigger_document_processing(
         description="If true, reuse existing ACU blob/result and skip a new ACU run.",
     ),
 ) -> Dict[str, str]:
+    _set_span_attrs(
+        {
+            "idp.operation": "trigger_document_processing",
+            "idp.document_id": document_id,
+            "idp.reuse_existing": reuse_existing,
+        }
+    )
     proc = _new_processor()
 
     if reuse_existing:
@@ -209,6 +229,7 @@ def trigger_document_processing(
 @router.get("/documents/{document_id}/status", response_model=DocumentStatusResponse)
 @router.get("/status/{document_id}", response_model=DocumentStatusResponse)
 def get_document_status(document_id: str) -> DocumentStatusResponse:
+    _set_span_attrs({"idp.operation": "get_document_status", "idp.document_id": document_id})
     proc = _new_processor()
     raw = proc.get_processing_status(document_id=document_id)
     if "error" in raw:
@@ -304,6 +325,7 @@ def _extract_fields_from_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
 @router.get("/results/{document_id}", response_model=DocumentResultsResponse)
 @router.get("/documents/{document_id}/results", response_model=DocumentResultsResponse)
 def get_document_results(document_id: str) -> DocumentResultsResponse:
+    _set_span_attrs({"idp.operation": "get_document_results", "idp.document_id": document_id})
     proc = _new_processor()
     raw = proc.get_processing_status(document_id=document_id)
     if "error" in raw:
@@ -356,6 +378,13 @@ def get_document_results(document_id: str) -> DocumentResultsResponse:
 @router.get("/visualization/{document_id}")
 @router.get("/documents/{document_id}/visualization")
 def get_document_visualization(document_id: str, page: int = 1) -> StreamingResponse:
+    _set_span_attrs(
+        {
+            "idp.operation": "get_document_visualization",
+            "idp.document_id": document_id,
+            "idp.page_number": page,
+        }
+    )
     image = get_storage().download_blob(document_id, Stage.ANNOTATED, f"_page_{page}.png")
     if image:
         return StreamingResponse(
@@ -409,6 +438,13 @@ def get_document_visualization(document_id: str, page: int = 1) -> StreamingResp
 @router.get("/documents/{document_id}/page/{page}/image")
 @router.get("/page-image/{document_id}")
 def get_document_page_image(document_id: str, page: int = 1) -> StreamingResponse:
+    _set_span_attrs(
+        {
+            "idp.operation": "get_document_page_image",
+            "idp.document_id": document_id,
+            "idp.page_number": page,
+        }
+    )
     if page < 1:
         raise HTTPException(status_code=400, detail="Page must be >= 1")
 
@@ -437,6 +473,7 @@ def get_document_page_image(document_id: str, page: int = 1) -> StreamingRespons
 
 @router.get("/documents")
 def list_documents(limit: int = 50, offset: int = 0) -> List[DocumentStatusResponse]:
+    _set_span_attrs({"idp.operation": "list_documents", "idp.limit": limit, "idp.offset": offset})
     proc = _new_processor()
     docs = proc.dms_service.list_documents(limit=limit, offset=offset)
 
@@ -464,6 +501,7 @@ def list_documents(limit: int = 50, offset: int = 0) -> List[DocumentStatusRespo
 
 @router.get("/health", response_model=HealthCheckResponse)
 def health_check() -> HealthCheckResponse:
+    _set_span_attrs({"idp.operation": "health_check"})
     services: Dict[str, str] = {}
     overall = "healthy"
 

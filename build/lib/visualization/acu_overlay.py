@@ -4,7 +4,7 @@ import io
 import re
 from typing import Any, Dict, List, Tuple
 
-from pdf2image import convert_from_bytes
+import fitz
 from PIL import Image, ImageDraw
 
 
@@ -93,9 +93,15 @@ def build_acu_annotated_pages(pdf_data: bytes, acu_result: Dict[str, Any]) -> Di
     """
     pages_by_num, raw_items = _extract_raw_field_items(acu_result)
 
-    images = convert_from_bytes(pdf_data, dpi=150, fmt="png")
-    if not images:
+    pdf = fitz.open(stream=pdf_data, filetype="pdf")
+    if len(pdf) == 0:
         return {}
+    images: List[Image.Image] = []
+    for page_idx in range(len(pdf)):
+        page = pdf[page_idx]
+        pix = page.get_pixmap(matrix=fitz.Matrix(1.8, 1.8), alpha=False)
+        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        images.append(img)
 
     page_to_drawables: Dict[int, List[Dict[str, Any]]] = {}
 
@@ -132,11 +138,9 @@ def build_acu_annotated_pages(pdf_data: bytes, acu_result: Dict[str, Any]) -> Di
 
             x0 = min(p[0] for p in points)
             y0 = min(p[1] for p in points)
-            conf = entry.get("confidence")
-            if isinstance(conf, (int, float)):
-                label = f"{entry['field_name']} ({conf * 100:.1f}%)"
-            else:
-                label = str(entry["field_name"])
+            raw_label = str(entry.get("field_name", "field"))
+            # Keep overlay labels minimal; remove technical suffixes and confidence text.
+            label = raw_label.removesuffix("_raw").removesuffix("_normalized")
             tx = int(max(0, x0))
             ty = int(y0 - 14 if y0 > 16 else y0 + 2)
             # Render label without opaque rectangle to avoid masking PDF content.

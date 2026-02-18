@@ -2,9 +2,11 @@
 
 from celery import Celery
 from src.config import AppConfig
+from src.observability import setup_observability
 
 # Load configuration from your AppConfig (same pattern as author)
 app_config = AppConfig()
+setup_observability()
 
 # Create Celery instance
 celery_app = Celery(

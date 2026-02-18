@@ -10,6 +10,7 @@ from typing import Optional, Dict, Any
 import psycopg2
 from azure.storage.blob import BlobServiceClient
 from dotenv import load_dotenv
+from opentelemetry.propagate import inject
 
 from src.dms.service import DmsService
 from src.dms.adapters import AzureBlobStorageClient, PostgresMetadataRepository
@@ -84,7 +85,12 @@ class AsyncDocumentProcessor:
             # Import dynamically to avoid circular imports
             from src.tasks.pipeline_tasks import process_document_async
 
-            task = process_document_async.delay(document_id=document_id)
+            headers: Dict[str, str] = {}
+            inject(headers)
+            task = process_document_async.apply_async(
+                kwargs={"document_id": document_id},
+                headers=headers,
+            )
             logger.info("Triggered async processing for %s, task_id=%s", document_id, task.id)
             return task.id
 

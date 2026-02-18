@@ -4,6 +4,7 @@ config
 credit_ocr_system
 dms
 integration
+observability
 scripts
 storage
 tasks
