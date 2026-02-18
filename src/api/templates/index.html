@@ -110,6 +110,28 @@
             justify-content: center;
             align-items: center;
         }
+        .action-grid {
+            margin-top: 1rem;
+            display: grid;
+            grid-template-columns: 1fr 1.4fr auto;
+            gap: .8rem;
+            align-items: end;
+        }
+        .field-block {
+            display: flex;
+            flex-direction: column;
+            gap: .35rem;
+        }
+        .field-label {
+            font-size: .82rem;
+            color: #334155;
+            font-weight: 700;
+        }
+        .action-btns {
+            display: flex;
+            gap: .55rem;
+            align-items: center;
+        }
 
         .input {
             border: 1px solid #cbd5e1;
@@ -305,6 +327,7 @@
             background: #fff;
             padding: .55rem;
             scroll-margin-top: 10px;
+            overflow: auto;
         }
         .page-card-title {
             font-size: .86rem;
@@ -352,6 +375,19 @@
             overflow: auto;
             white-space: pre-wrap;
         }
+        #debugDetails {
+            margin-top: 1rem;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            padding: .5rem .65rem;
+            background: #0b1220;
+            color: #cbd5e1;
+        }
+        #debugDetails > summary {
+            cursor: pointer;
+            font-size: .84rem;
+            font-weight: 700;
+        }
 
         @keyframes pulse { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -362,6 +398,7 @@
             .header h1 { font-size: 1.9rem; }
             .review-row { grid-template-columns: 1fr; }
             .review-conf { text-align: left; }
+            .action-grid { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -387,10 +424,21 @@
                     <button class="btn btn-primary" id="chooseFileBtn" type="button">Choose File</button>
                 </div>
 
-                <div class="controls">
-                    <input id="documentType" class="input" value="license-agreement" placeholder="Document type">
-                    <input id="existingDocId" class="input" placeholder="Existing document ID (optional)" style="min-width:280px;">
-                    <button class="btn btn-secondary" id="triggerBtn" type="button" onclick="triggerCurrent()">Trigger</button>
+                <div class="action-grid">
+                    <div class="field-block">
+                        <label class="field-label" for="documentType">Document Type</label>
+                        <input id="documentType" class="input" value="license-agreement" placeholder="e.g. license-agreement">
+                    </div>
+                    <div class="field-block">
+                        <label class="field-label" for="existingDocId">Existing Document ID (Optional)</label>
+                        <input id="existingDocId" class="input" placeholder="Paste a document ID to reuse stored results">
+                    </div>
+                    <div class="field-block">
+                        <label class="field-label">&nbsp;</label>
+                        <div class="action-btns">
+                            <button class="btn btn-secondary" id="triggerBtn" type="button" onclick="triggerCurrent()">Trigger Processing</button>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="upload-wrap" id="uploadWrap">
@@ -411,7 +459,10 @@
                 </div>
 
                 <div id="errorBox" class="error-box"></div>
-                <div id="debugOutput">Ready.</div>
+                <details id="debugDetails">
+                    <summary>Debug JSON (Optional)</summary>
+                    <pre id="debugOutput">Ready.</pre>
+                </details>
             </div>
         </div>
 
@@ -664,6 +715,7 @@
                 normalizedEditor.innerHTML = '<div class="review-key">No normalized fields detected.</div>';
                 return;
             }
+            const prettyName = (fieldKey) => fieldKey.replace(/_normalized$/i, '');
             keys.forEach((key) => {
                 const val = normalizedFields[key];
                 let value = extractDisplayValue(val);
@@ -682,7 +734,7 @@
                 const row = document.createElement('div');
                 row.className = 'review-row';
                 row.innerHTML = `
-                    <div class="review-key">${key}</div>
+                    <div class="review-key">${prettyName(key)}</div>
                     <div>
                         <input class="review-input" data-field-key="${key}" value="${String(formatFieldValue(value ?? '')).replaceAll('"', '&quot;')}" />
                         ${usedRawFallback ? `<div class="review-hint">No normalized value returned; prefilled from raw field.</div>` : ''}
@@ -877,18 +929,19 @@
                 item.innerHTML = '<span class="field-name">Info</span><span class="field-value">No raw fields found</span>';
                 fieldsList.appendChild(item);
             } else {
+                const prettyRawName = (fieldKey) => fieldKey.replace(/_raw$/i, '');
                 rawKeys.forEach((key) => {
                     const val = rawFields[key];
                     const text = (val && typeof val === 'object' && 'value' in val) ? val.value : val;
-                    const renderedValue = formatFieldValue(text);
                     const pages = (val && typeof val === 'object' && Array.isArray(val.pages)) ? val.pages : [];
                     const firstPage = pages.length ? pages[0] : null;
+                    const renderedValue = firstPage ? formatFieldValue(text) : '';
                     const confidence = (val && typeof val === 'object' && typeof val.confidence === 'number') ? val.confidence : null;
                     const item = document.createElement('li');
                     item.className = 'field-item';
                     item.innerHTML = `
                         <div>
-                            <div class="field-name">${key}</div>
+                            <div class="field-name">${prettyRawName(key)}</div>
                             ${firstPage ? `<div class="field-page">Page ${firstPage}</div>` : `<div class="field-page-missing">No source page found in PDF</div>`}
                             ${confidence !== null ? `<div class="field-confidence">Confidence: ${(confidence * 100).toFixed(1)}%</div>` : ''}
                         </div>
