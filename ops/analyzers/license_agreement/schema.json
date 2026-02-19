@@ -1,57 +1,66 @@
 {
+  "baseAnalyzerId": "prebuilt-document",
   "description": "License agreement extraction analyzer (raw + normalized fields).",
-  "scenario": "document",
   "config": {
-    "returnDetails": true
+    "returnDetails": false,
+    "enableOcr": true,
+    "enableLayout": true,
+    "estimateFieldSourceAndConfidence": true
   },
-  "fields": {
-    "DocumentName_raw": {
-      "type": "string",
-      "method": "extract"
-    },
-    "DocumentName_normalized": {
-      "type": "string",
-      "method": "generate"
-    },
-    "Parties_raw": {
-      "type": "string",
-      "method": "extract"
-    },
-    "Parties_normalized": {
-      "type": "string",
-      "method": "generate"
-    },
-    "AgreementDate_raw": {
-      "type": "string",
-      "method": "extract"
-    },
-    "AgreementDate_normalized": {
-      "type": "string",
-      "method": "generate"
-    },
-    "EffectiveDate_raw": {
-      "type": "string",
-      "method": "extract"
-    },
-    "EffectiveDate_normalized": {
-      "type": "string",
-      "method": "generate"
-    },
-    "ExpirationDate_raw": {
-      "type": "string",
-      "method": "extract"
-    },
-    "ExpirationDate_normalized": {
-      "type": "string",
-      "method": "generate"
-    },
-    "GoverningLaw_raw": {
-      "type": "string",
-      "method": "extract"
-    },
-    "GoverningLaw_normalized": {
-      "type": "string",
-      "method": "generate"
+  "models": {
+    "completion": "gpt-4.1-mini"
+  },
+  "fieldSchema": {
+    "name": "LicenseAgreementFields_RawNormalized_SinglePass",
+    "fields": {
+      "DocumentName_raw": {
+        "type": "string",
+        "method": "extract"
+      },
+      "DocumentName_normalized": {
+        "type": "string",
+        "method": "generate"
+      },
+      "Parties_raw": {
+        "type": "string",
+        "method": "extract"
+      },
+      "Parties_normalized": {
+        "type": "string",
+        "method": "generate"
+      },
+      "AgreementDate_raw": {
+        "type": "string",
+        "method": "extract"
+      },
+      "AgreementDate_normalized": {
+        "type": "string",
+        "method": "generate"
+      },
+      "EffectiveDate_raw": {
+        "type": "string",
+        "method": "extract"
+      },
+      "EffectiveDate_normalized": {
+        "type": "string",
+        "method": "generate"
+      },
+      "ExpirationDate_raw": {
+        "type": "string",
+        "method": "extract"
+      },
+      "ExpirationDate_normalized": {
+        "type": "string",
+        "method": "generate"
+      },
+      "GoverningLaw_raw": {
+        "type": "string",
+        "method": "extract"
+      },
+      "GoverningLaw_normalized": {
+        "type": "string",
+        "method": "generate"
+      }
     }
   }
 }

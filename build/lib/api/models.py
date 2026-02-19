@@ -40,6 +40,7 @@ class DocumentResultsResponse(BaseModel):
     acu_result: Dict[str, Any] = Field(default_factory=dict)
     extracted_fields: Dict[str, Any] = Field(default_factory=dict)
     has_visualization: bool = False
+    total_pages: Optional[int] = None
 
 
 class ErrorResponse(BaseModel):

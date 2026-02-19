@@ -3,6 +3,10 @@
 import os
 from dataclasses import dataclass
 from urllib.parse import urlparse
+from dotenv import load_dotenv
+
+
+load_dotenv()
 
 
 def _required_env(name: str) -> str:
@@ -10,6 +14,20 @@ def _required_env(name: str) -> str:
     if not value:
         raise RuntimeError(f"Missing required environment variable: {name}")
     return value
+
+
+# Temporary runtime analyzer routing by document type.
+# Move this to DB mapping later when analyzer management is finalized.
+HARDCODED_ACU_ANALYZERS = {
+    "license-agreement": "license_agreement_extraction_wrt_CUAD_v4_raw_normalized_singlepass",
+}
+
+
+def get_hardcoded_analyzer_id(document_type: str) -> str | None:
+    key = (document_type or "").strip().lower()
+    if not key:
+        return None
+    return HARDCODED_ACU_ANALYZERS.get(key)
 
 
 # -------------------------
@@ -83,7 +101,7 @@ class RedisConfig:
 class AcuConfig:
     endpoint: str
     api_key: str
-    analyzer_id: str
+    analyzer_id: str | None
 
 
 # -------------------------
@@ -139,7 +157,7 @@ class AppConfig:
         self.acu = AcuConfig(
             endpoint=os.getenv("AZURE_AI_ENDPOINT", "https://YOUR-ACU-RESOURCE.cognitiveservices.azure.com/"),
             api_key=os.getenv("AZURE_AI_API_KEY", "YOUR_ACU_KEY"),
-            analyzer_id=os.getenv("ACU_ANALYZER_ID", os.getenv("AZURE_AI_ANALYZER_ID", "your-analyzer-id")),
+            analyzer_id=os.getenv("ACU_ANALYZER_ID") or os.getenv("AZURE_AI_ANALYZER_ID"),
         )
 
         # API service

@@ -45,3 +45,4 @@ Start and validate the FastAPI layer and test upload/trigger/status/results from
   - host API: `localhost`
   - docker worker: `redis`
 - API traces and Celery task traces are now propagated end-to-end via OpenTelemetry headers.
+- Results page supports both `Process Another` and `Home` reset actions.

@@ -1,1 +1,1 @@
-from .system import AppConfig
+from .system import AppConfig, get_hardcoded_analyzer_id

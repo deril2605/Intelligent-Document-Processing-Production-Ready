@@ -46,3 +46,4 @@ For each `doc_id`, notebook stores stage artifacts and then reads back JSON to v
 
 - This notebook is a storage-focused prototype and not the final API contract.
 - Main app now standardizes container usage under `documents` with folder prefixes (`raw/`, `acu/`, `annotated/`).
+- Current UI and API follow the same storage convention in production flow.

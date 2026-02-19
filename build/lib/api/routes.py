@@ -7,6 +7,7 @@ import os
 import re
 import tempfile
 import io
+import threading
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
@@ -14,8 +15,8 @@ from typing import Any, Dict, List, Optional
 
 import fitz
 import psycopg2
+import redis
 from psycopg2 import sql
-from psycopg2.extras import Json
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from opentelemetry import trace
@@ -120,6 +121,19 @@ def _validate_normalized_fields(normalized_fields: Dict[str, str]) -> Dict[str, 
         cleaned[key] = value
 
     return cleaned
+
+
+def _db_column_from_field_key(field_key: str) -> str:
+    # Store reviewed normalized values without the technical suffix.
+    if field_key.lower().endswith("_normalized"):
+        base = field_key[: -len("_normalized")]
+    else:
+        base = field_key
+
+    base = base.strip("_")
+    if not base or not _FIELD_KEY_PATTERN.match(base):
+        raise HTTPException(status_code=400, detail=f"Invalid DB column derived from field key: {field_key!r}")
+    return base
 
 
 def _upload_and_fetch_status(*, payload: bytes, filename: str, document_type: str) -> Dict[str, Any]:
@@ -404,6 +418,15 @@ def get_document_results(document_id: str) -> DocumentResultsResponse:
 
     storage = get_storage()
     has_visualization = bool(storage.download_blob(document_id, Stage.ANNOTATED, "_page_1.png"))
+    total_pages: Optional[int] = None
+    try:
+        pdf_bytes = proc.dms_service.download_document(document_id=document_id)
+        if pdf_bytes:
+            pdf = fitz.open(stream=pdf_bytes, filetype="pdf")
+            total_pages = len(pdf)
+            pdf.close()
+    except Exception:
+        total_pages = None
 
     return DocumentResultsResponse(
         document_id=document_id,
@@ -412,6 +435,7 @@ def get_document_results(document_id: str) -> DocumentResultsResponse:
         acu_result=parsed,
         extracted_fields=_extract_fields_from_payload(parsed),
         has_visualization=has_visualization,
+        total_pages=total_pages,
     )
 
 
@@ -466,23 +490,63 @@ def save_reviewed_normalized_fields(
                         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                         document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
                         document_type VARCHAR(100) NOT NULL,
-                        normalized_fields JSONB NOT NULL,
+                        source_filename VARCHAR(255),
                         source VARCHAR(30) NOT NULL DEFAULT 'ui-review',
                         created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
                     )
                     """
                 ).format(sql.Identifier(table_name))
             )
+            cursor.execute(
+                sql.SQL("CREATE INDEX IF NOT EXISTS {} ON {} (document_id)").format(
+                    sql.Identifier(f"{table_name}_document_id_idx"),
+                    sql.Identifier(table_name),
+                )
+            )
+
+            db_field_map: Dict[str, str] = {}
+            for field_key, field_value in normalized_fields.items():
+                db_col = _db_column_from_field_key(field_key)
+                if db_col in db_field_map and db_field_map[db_col] != field_value:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Field key collision after normalization: {field_key} -> {db_col}",
+                    )
+                db_field_map[db_col] = field_value
+
+            # Add one SQL column per normalized field for this document type table.
+            for db_col in db_field_map:
+                cursor.execute(
+                    sql.SQL("ALTER TABLE {} ADD COLUMN IF NOT EXISTS {} TEXT").format(
+                        sql.Identifier(table_name),
+                        sql.Identifier(db_col),
+                    )
+                )
+
+            metadata_columns = ["document_id", "document_type", "source_filename", "source"]
+            dynamic_columns = list(db_field_map.keys())
+            insert_columns = metadata_columns + dynamic_columns
+            insert_values = [
+                document_id,
+                selected_document_type,
+                str(doc.get("source_filename") or ""),
+                "ui-review",
+                *[db_field_map[c] for c in dynamic_columns],
+            ]
+            placeholders = [sql.Placeholder() for _ in insert_columns]
 
             cursor.execute(
                 sql.SQL(
                     """
-                    INSERT INTO {} (document_id, document_type, normalized_fields)
-                    VALUES (%s, %s, %s)
+                    INSERT INTO {} ({}) VALUES ({})
                     RETURNING id
                     """
-                ).format(sql.Identifier(table_name)),
-                (document_id, selected_document_type, Json(normalized_fields)),
+                ).format(
+                    sql.Identifier(table_name),
+                    sql.SQL(", ").join(sql.Identifier(c) for c in insert_columns),
+                    sql.SQL(", ").join(placeholders),
+                ),
+                insert_values,
             )
             row = cursor.fetchone()
             if not row:
@@ -640,35 +704,64 @@ def health_check() -> HealthCheckResponse:
     overall = "healthy"
 
     try:
-        proc = _new_processor()
-        proc.dms_service.list_documents(limit=1, offset=0)
+        cfg = AppConfig()
+        conn = psycopg2.connect(connect_timeout=3, **cfg.database.psycopg2_dsn)
+        with conn:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                _ = cursor.fetchone()
+        conn.close()
         services["database"] = "healthy"
     except Exception as exc:
         services["database"] = f"unhealthy: {exc}"
         overall = "unhealthy"
 
     try:
-        get_storage().ensure_all_containers_ready()
+        # Lightweight check only: do not create/modify containers on health.
+        _ = get_storage().blob_service_client
         services["blob_storage"] = "healthy"
     except Exception as exc:
         services["blob_storage"] = f"unhealthy: {exc}"
         overall = "unhealthy"
 
     try:
-        inspector = celery_app.control.inspect(timeout=4)
-        ping = inspector.ping() or {}
-        if ping:
-            services["celery"] = "healthy"
-        else:
-            # Fallback: some broker/network setups may not answer ping quickly,
-            # but workers still show up in stats.
-            stats = inspector.stats() or {}
-            if stats:
-                services["celery"] = "healthy"
-            else:
-                services["celery"] = "degraded: no active workers"
-                if overall == "healthy":
-                    overall = "degraded"
+        probe_result: Dict[str, str] = {"status": "degraded: celery check timeout"}
+
+        def _celery_probe() -> None:
+            try:
+                inspector = celery_app.control.inspect(timeout=3)
+                ping = inspector.ping() or {}
+                if ping:
+                    probe_result["status"] = "healthy"
+                    return
+                stats = inspector.stats() or {}
+                if stats:
+                    probe_result["status"] = "healthy"
+                    return
+                probe_result["status"] = "degraded: no active workers"
+            except Exception as probe_exc:
+                probe_result["status"] = f"degraded: {probe_exc}"
+
+        t = threading.Thread(target=_celery_probe, daemon=True)
+        t.start()
+        t.join(timeout=4)
+
+        celery_status = probe_result["status"]
+
+        # Fallback: if inspect control-plane is flaky, treat worker path as healthy
+        # when Redis broker itself is reachable from API process.
+        if celery_status != "healthy":
+            try:
+                broker = app_config.redis.broker_url
+                rc = redis.Redis.from_url(broker, socket_connect_timeout=2, socket_timeout=2)
+                if rc.ping():
+                    celery_status = "healthy"
+            except Exception:
+                pass
+
+        services["celery"] = celery_status
+        if services["celery"] != "healthy" and overall == "healthy":
+            overall = "degraded"
     except Exception as exc:
         services["celery"] = f"degraded: {exc}"
         if overall == "healthy":

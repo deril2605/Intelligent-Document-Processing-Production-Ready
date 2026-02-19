@@ -30,6 +30,7 @@ Quick-start the local app stack from notebook cells:
 - Python venv active with project dependencies
 - `.env` configured
 - `.env` includes `APPLICATIONINSIGHTS_CONNECTION_STRING` for telemetry export
+- If provisioning analyzers in a new Azure account, include `ACU_GPT41_MINI_DEPLOYMENT`
 
 Recommended for host API in notebook session:
 

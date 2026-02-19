@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from opentelemetry import trace
 
-from src.config import AppConfig
+from src.config import AppConfig, get_hardcoded_analyzer_id
 from src.dms.service import DmsService
 from src.acu.client import AzureContentUnderstandingClient
 from src.visualization import build_acu_annotated_pages
@@ -45,9 +45,21 @@ async def process_document_with_acu(
     ):
         cfg = AppConfig()
 
+        resolved_doc_type = "unknown"
+        if dms_service is not None:
+            try:
+                doc = dms_service.get_document(document_id=document_id)
+                if doc and doc.get("document_type"):
+                    resolved_doc_type = str(doc["document_type"])
+            except Exception:
+                pass
+
         if analyzer_id is None:
-            analyzer_id = cfg.acu.analyzer_id
+            analyzer_id = get_hardcoded_analyzer_id(resolved_doc_type) or cfg.acu.analyzer_id
+        if not analyzer_id:
+            raise ValueError(f"No analyzer configured for document_type='{resolved_doc_type}'")
         trace.get_current_span().set_attribute("idp.acu.analyzer_id", analyzer_id)
+        trace.get_current_span().set_attribute("idp.document_type", resolved_doc_type)
 
         # Optional: mark processing status in DB
         if dms_service is not None:
@@ -75,14 +87,7 @@ async def process_document_with_acu(
             acu_result: Dict[str, Any] = acu_client.poll_result(analysis_response)
 
         # Decide where to store ACU result JSON in blob
-        doc_type = "unknown"
-        if dms_service is not None:
-            try:
-                doc = dms_service.get_document(document_id=document_id)
-                if doc and doc.get("document_type"):
-                    doc_type = str(doc["document_type"])
-            except Exception:
-                pass
+        doc_type = resolved_doc_type
 
         acu_result_blob_path = f"acu/{doc_type}/{document_id}.json"
 

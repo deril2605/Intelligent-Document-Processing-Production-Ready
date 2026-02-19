@@ -34,6 +34,7 @@ Checks covered:
 - `AZURE_OPENAI_API_KEY`
 - `AZURE_OPENAI_API_VERSION`
 - `AZURE_OPENAI_DEPLOYMENT`
+- `ACU_GPT41_MINI_DEPLOYMENT` (needed for initializing ACU defaults in fresh Azure accounts)
 - `APPLICATIONINSIGHTS_CONNECTION_STRING` (optional but recommended for observability)
 - `OTEL_SERVICE_NAME` (optional; default configured in code)
 

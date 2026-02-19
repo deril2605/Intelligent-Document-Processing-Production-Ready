@@ -2,27 +2,19 @@
 
 Files:
 
-- `schema.json`: analyzer schema
-- `create_analyzer.py`: create/upsert analyzer from schema
-- `update_analyzer.py`: update existing analyzer with schema
+- `create_license_agreement_analyzer.py`: canonical analyzer creation script
+- `schema.json`: reference schema snapshot (optional)
 
 ## Usage
 
 From repo root:
 
 ```bash
-python ops/analyzers/license_agreement/create_analyzer.py --wait
+python -m ops.analyzers.license_agreement.create_license_agreement_analyzer
 ```
 
-or
+Script reads these environment variables:
 
-```bash
-python ops/analyzers/license_agreement/update_analyzer.py --wait
-```
-
-By default scripts read:
-
-- `ACU_ANALYZER_ID`
 - `AZURE_AI_ENDPOINT`
 - `AZURE_AI_API_KEY`
 - `AZURE_AI_API_VERSION`

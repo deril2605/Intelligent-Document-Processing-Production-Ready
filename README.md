@@ -35,7 +35,7 @@ End-to-end document extraction pipeline using:
 - Python 3.11+ (project venv recommended)
 - Docker Desktop (running)
 - Azure Blob Storage account and connection string
-- Azure Content Understanding endpoint, API key, analyzer ID
+- Azure Content Understanding endpoint, API key
 
 ## Environment
 
@@ -47,7 +47,11 @@ AZURE_BLOB_CONTAINER=documents
 
 AZURE_AI_ENDPOINT=...
 AZURE_AI_API_KEY=...
-ACU_ANALYZER_ID=...
+AZURE_AI_API_VERSION=2025-11-01
+# Required when setting ACU defaults for a fresh Azure account:
+ACU_GPT41_MINI_DEPLOYMENT=...
+# Optional fallback only (runtime prefers hardcoded mapping by document_type):
+# ACU_ANALYZER_ID=...
 
 # Observability (OpenTelemetry -> Azure Application Insights)
 APPLICATIONINSIGHTS_CONNECTION_STRING=...
@@ -155,17 +159,16 @@ requests
 Use the dedicated `ops/` folder for per-document-type rollout:
 
 - Analyzer scripts:
-  - `ops/analyzers/license_agreement/create_analyzer.py`
-  - `ops/analyzers/license_agreement/update_analyzer.py`
+  - `ops/analyzers/license_agreement/create_license_agreement_analyzer.py`
   - `ops/analyzers/license_agreement/schema.json`
 - SQL assets:
   - `ops/db/reviewed_tables/reviewed_license_agreement.sql`
   - `ops/db/migrations/`
 
-Create/update analyzer:
+Create analyzer:
 
 ```bash
-python ops/analyzers/license_agreement/create_analyzer.py --wait
+python -m ops.analyzers.license_agreement.create_license_agreement_analyzer
 ```
 
 Apply reviewed table SQL (example):
@@ -174,6 +177,19 @@ Apply reviewed table SQL (example):
 -- Run the contents of this file in DBeaver SQL editor:
 -- ops/db/reviewed_tables/reviewed_license_agreement.sql
 ```
+
+### Analyzer Resolution (Current)
+
+ACU analyzer selection is resolved at runtime from a hardcoded map keyed by `document_type` in:
+
+- `src/config/system.py`
+
+Lookup order:
+
+1. `HARDCODED_ACU_ANALYZERS[document_type]`
+2. Optional env fallback (`ACU_ANALYZER_ID` or `AZURE_AI_ANALYZER_ID`)
+
+This means you do not need `ACU_ANALYZER_ID` in `compose.yml` for normal multi-type routing.
 
 ## UI Usage
 

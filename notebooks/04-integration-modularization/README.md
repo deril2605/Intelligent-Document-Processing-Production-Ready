@@ -33,3 +33,4 @@ Run a modular end-to-end integration using `src/` packages instead of notebook-o
 
 - Reusing a fixed demo `document_id` may overwrite previous artifacts.
 - This notebook is the bridge from ACU experiments to reusable production modules.
+- Analyzer resolution in runtime currently prefers hardcoded `document_type -> analyzer_id` mapping in `src/config/system.py`.

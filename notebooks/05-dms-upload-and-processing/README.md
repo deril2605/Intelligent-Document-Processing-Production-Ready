@@ -36,3 +36,4 @@ Validate the DMS layer end-to-end:
 
 - Status values must match DB constraints.
 - This notebook verifies repository/service behavior before async task orchestration.
+- Review-save flow now writes normalized fields into typed columns in `reviewed_<document_type>` tables.

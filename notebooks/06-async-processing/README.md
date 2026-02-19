@@ -29,6 +29,7 @@ Polled values include:
   - `redis`
   - `celery-worker`
 - Valid Azure env vars for Blob + ACU
+- For fresh Azure accounts, ensure ACU defaults are initialized (`ACU_GPT41_MINI_DEPLOYMENT` is set before analyzer creation).
 - Sample PDF exists in `data/`
 
 ## Expected Success

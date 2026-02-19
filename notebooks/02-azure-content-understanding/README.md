@@ -42,7 +42,11 @@ The notebooks iterate through analyzer designs, then move to a cleaner single-pa
 - `AZURE_AI_ENDPOINT`
 - `AZURE_AI_API_KEY`
 - `AZURE_AI_API_VERSION` (if applicable in your helper)
-- `ACU_ANALYZER_ID` (for reusing analyzer IDs)
+- `ACU_GPT41_MINI_DEPLOYMENT` (for new Azure accounts when setting ACU defaults)
+
+Analyzer provisioning for the app now uses:
+
+- `ops/analyzers/license_agreement/create_license_agreement_analyzer.py`
 
 ## Input Used
 
