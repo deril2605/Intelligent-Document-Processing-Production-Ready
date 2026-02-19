@@ -3,16 +3,16 @@ services:
     image: postgres:15-alpine
     container_name: postgres
     environment:
-      POSTGRES_DB: dms_meta
-      POSTGRES_USER: dms
-      POSTGRES_PASSWORD: dms
+      POSTGRES_DB: ${PGDATABASE}
+      POSTGRES_USER: ${PGUSER}
+      POSTGRES_PASSWORD: ${PGPASSWORD}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./database/schemas:/schema:ro
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dms -d dms_meta"]
+      test: ["CMD-SHELL", "pg_isready -U ${PGUSER} -d ${PGDATABASE}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -52,13 +52,13 @@ services:
         condition: service_healthy
     environment:
       # Important: inside Docker, use service names, not localhost
-      - DATABASE_URL=postgresql+psycopg://dms:dms@postgres:5432/dms_meta
+      - DATABASE_URL=postgresql+psycopg://${PGUSER}:${PGPASSWORD}@postgres:${PGPORT}/${PGDATABASE}
       - REDIS_URL=redis://redis:6379/0
       - PGHOST=postgres
-      - PGPORT=5432
-      - PGDATABASE=dms_meta
-      - PGUSER=dms
-      - PGPASSWORD=dms
+      - PGPORT=${PGPORT}
+      - PGDATABASE=${PGDATABASE}
+      - PGUSER=${PGUSER}
+      - PGPASSWORD=${PGPASSWORD}
 
       # Azure Blob Storage
       - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING}

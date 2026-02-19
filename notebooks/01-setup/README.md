@@ -34,6 +34,8 @@ Checks covered:
 - `AZURE_OPENAI_API_KEY`
 - `AZURE_OPENAI_API_VERSION`
 - `AZURE_OPENAI_DEPLOYMENT`
+- `APPLICATIONINSIGHTS_CONNECTION_STRING` (optional but recommended for observability)
+- `OTEL_SERVICE_NAME` (optional; default configured in code)
 
 ## Common Issues
 

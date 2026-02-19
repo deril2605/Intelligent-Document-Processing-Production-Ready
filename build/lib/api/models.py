@@ -52,3 +52,16 @@ class HealthCheckResponse(BaseModel):
     status: str
     timestamp: datetime
     services: Dict[str, str]
+
+
+class SaveReviewRequest(BaseModel):
+    document_type: str
+    normalized_fields: Dict[str, str] = Field(default_factory=dict)
+
+
+class SaveReviewResponse(BaseModel):
+    document_id: str
+    document_type: str
+    table_name: str
+    record_id: str
+    saved_field_count: int

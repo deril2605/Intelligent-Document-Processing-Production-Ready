@@ -20,6 +20,7 @@ Start and validate the FastAPI layer and test upload/trigger/status/results from
 7. Trigger with `/api/v1/documents/{id}/trigger`.
 8. Poll `/api/v1/documents/{id}/status`.
 9. Optional SQL checks for document/job states.
+10. Verify trace telemetry in Application Insights (`Search` -> `Traces`).
 
 ## Key Endpoints Used
 
@@ -43,3 +44,4 @@ Start and validate the FastAPI layer and test upload/trigger/status/results from
 - API host process and Docker worker use different Redis hostnames:
   - host API: `localhost`
   - docker worker: `redis`
+- API traces and Celery task traces are now propagated end-to-end via OpenTelemetry headers.

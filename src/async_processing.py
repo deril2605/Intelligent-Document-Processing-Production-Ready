@@ -12,6 +12,7 @@ from azure.storage.blob import BlobServiceClient
 from dotenv import load_dotenv
 from opentelemetry.propagate import inject
 
+from src.config import AppConfig
 from src.dms.service import DmsService
 from src.dms.adapters import AzureBlobStorageClient, PostgresMetadataRepository
 
@@ -26,6 +27,8 @@ class AsyncDocumentProcessor:
     _container_lock = threading.Lock()
 
     def __init__(self) -> None:
+        cfg = AppConfig()
+
         # --- Azure Blob (cloud) ---
         conn_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
         if not conn_str:
@@ -34,7 +37,7 @@ class AsyncDocumentProcessor:
         blob_service_client = BlobServiceClient.from_connection_string(conn_str)
 
         # Ensure container exists once per process (avoid repeated 409 ContainerAlreadyExists noise).
-        container = os.getenv("AZURE_BLOB_CONTAINER", "documents")
+        container = cfg.azure.storage.container_name
         if not AsyncDocumentProcessor._container_ready:
             with AsyncDocumentProcessor._container_lock:
                 if not AsyncDocumentProcessor._container_ready:
@@ -45,13 +48,7 @@ class AsyncDocumentProcessor:
                     AsyncDocumentProcessor._container_ready = True
 
         # --- Postgres ---
-        pg_conn = psycopg2.connect(
-            host=os.getenv("PGHOST", "localhost"),
-            port=int(os.getenv("PGPORT", "5432")),
-            dbname=os.getenv("PGDATABASE", "dms_meta"),
-            user=os.getenv("PGUSER", "dms"),
-            password=os.getenv("PGPASSWORD","dms"),
-        )
+        pg_conn = psycopg2.connect(**cfg.database.psycopg2_dsn)
         try:
             pg_conn.autocommit = True
         except Exception:

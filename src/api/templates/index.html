@@ -59,10 +59,16 @@
         }
 
         .status-dot { width: 11px; height: 11px; border-radius: 999px; }
-        .loading { background: #94a3b8; animation: pulse 1.2s infinite; }
+        .status-loading { background: #94a3b8; animation: pulse 1.2s infinite; }
         .healthy { background: var(--ok); box-shadow: 0 0 8px rgba(22,163,74,.7); }
         .warning { background: var(--warn); box-shadow: 0 0 8px rgba(217,119,6,.7); }
         .error { background: var(--bad); box-shadow: 0 0 8px rgba(220,38,38,.7); }
+        .status-text {
+            font-size: .78rem;
+            color: #cbd5e1;
+            text-transform: uppercase;
+            letter-spacing: .2px;
+        }
 
         .card {
             background: var(--card);
@@ -222,6 +228,65 @@
             border: 1px solid #fecaca;
             border-radius: 8px;
             padding: .7rem;
+        }
+        .notice-box {
+            margin-top: .8rem;
+            display: none;
+            border-radius: 8px;
+            padding: .65rem .75rem;
+            font-size: .9rem;
+            border: 1px solid transparent;
+        }
+        .notice-success {
+            display: block;
+            background: #ecfdf5;
+            color: #065f46;
+            border-color: #a7f3d0;
+        }
+        .notice-error {
+            display: block;
+            background: #fef2f2;
+            color: #991b1b;
+            border-color: #fecaca;
+        }
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(2, 6, 23, .45);
+            z-index: 1000;
+            padding: 1rem;
+        }
+        .modal-backdrop.show {
+            display: flex;
+        }
+        .modal-card {
+            width: 100%;
+            max-width: 460px;
+            border-radius: 12px;
+            background: #fff;
+            color: #0f172a;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 24px 60px rgba(2, 6, 23, .35);
+            overflow: hidden;
+        }
+        .modal-head {
+            padding: .85rem 1rem;
+            border-bottom: 1px solid #e2e8f0;
+            font-weight: 700;
+        }
+        .modal-body {
+            padding: 1rem;
+            color: #334155;
+            line-height: 1.4;
+        }
+        .modal-actions {
+            padding: .85rem 1rem;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: flex-end;
         }
 
         .results-grid {
@@ -410,12 +475,13 @@
         <div class="header">
             <h1>Intelligent Document Processing</h1>
             <p>Upload documents, trigger ACU extraction, and track progress live.</p>
-            <div class="service-status" id="serviceStatus">
-                <div class="status-item" id="status-database"><span class="status-dot loading"></span><span>Database</span></div>
-                <div class="status-item" id="status-storage"><span class="status-dot loading"></span><span>Storage</span></div>
-                <div class="status-item" id="status-celery"><span class="status-dot loading"></span><span>Worker</span></div>
+                <div class="service-status" id="serviceStatus">
+                    <div class="status-item" id="status-database"><span class="status-dot status-loading"></span><span>Database</span><span class="status-text" id="status-text-database">checking</span></div>
+                    <div class="status-item" id="status-storage"><span class="status-dot status-loading"></span><span>Storage</span><span class="status-text" id="status-text-storage">checking</span></div>
+                <div class="status-item" id="status-celery"><span class="status-dot status-loading"></span><span>Worker</span><span class="status-text" id="status-text-celery">checking</span></div>
             </div>
         </div>
+        <div id="noticeBox" class="notice-box"></div>
 
         <div class="card" id="uploadCard">
             <div class="card-header"><h2>Upload</h2></div>
@@ -491,7 +557,7 @@
                         <h3 style="margin-bottom:.6rem;">Normalized Fields Review</h3>
                         <div id="normalizedEditor"></div>
                         <div class="controls" style="justify-content:flex-start; margin-top:.5rem;">
-                            <button class="btn btn-primary" id="sendDbBtn" type="button" onclick="dummySendToDb()">Send to DB (Dummy)</button>
+                            <button class="btn btn-primary" id="sendDbBtn" type="button" onclick="sendToDb()">Send to DB</button>
                         </div>
                     </div>
                 </div>
@@ -501,9 +567,19 @@
             </div>
         </div>
     </div>
+    <div id="resultModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="resultModalTitle">
+        <div class="modal-card">
+            <div class="modal-head" id="resultModalTitle">Action Result</div>
+            <div class="modal-body" id="resultModalBody">Done.</div>
+            <div class="modal-actions">
+                <button class="btn btn-primary" type="button" id="resultModalOkBtn">OK</button>
+            </div>
+        </div>
+    </div>
 
     <script>
         let currentDocumentId = null;
+        let currentDocumentType = 'license-agreement';
         let statusTimer = null;
 
         const uploadArea = document.getElementById('uploadArea');
@@ -515,6 +591,7 @@
         const triggerBtn = document.getElementById('triggerBtn');
         const existingDocId = document.getElementById('existingDocId');
         const errorBox = document.getElementById('errorBox');
+        const noticeBox = document.getElementById('noticeBox');
         const debugOutput = document.getElementById('debugOutput');
         const uploadCard = document.getElementById('uploadCard');
         const resultsCard = document.getElementById('resultsCard');
@@ -523,6 +600,9 @@
         const statusBadge = document.getElementById('statusBadge');
         const visualizationPages = document.getElementById('visualizationPages');
         const noVisualization = document.getElementById('noVisualization');
+        const resultModal = document.getElementById('resultModal');
+        const resultModalBody = document.getElementById('resultModalBody');
+        const resultModalOkBtn = document.getElementById('resultModalOkBtn');
 
         function setDebug(value) {
             debugOutput.textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
@@ -553,6 +633,27 @@
         function hideError() {
             errorBox.style.display = 'none';
             errorBox.textContent = '';
+        }
+
+        function showNotice(message, kind = 'success') {
+            noticeBox.style.display = 'block';
+            noticeBox.textContent = message;
+            noticeBox.className = 'notice-box ' + (kind === 'error' ? 'notice-error' : 'notice-success');
+        }
+
+        function hideNotice() {
+            noticeBox.style.display = 'none';
+            noticeBox.textContent = '';
+            noticeBox.className = 'notice-box';
+        }
+
+        function showModal(message) {
+            resultModalBody.textContent = message;
+            resultModal.classList.add('show');
+        }
+
+        function hideModal() {
+            resultModal.classList.remove('show');
         }
 
         function setStep(id, state) {
@@ -748,13 +849,65 @@
             });
         }
 
-        function dummySendToDb() {
-            const payload = {};
+        async function sendToDb() {
+            if (!currentDocumentId) {
+                showError('No document selected.');
+                return;
+            }
+
+            const normalizedFields = {};
             normalizedEditor.querySelectorAll('input[data-field-key]').forEach((el) => {
-                payload[el.getAttribute('data-field-key')] = el.value;
+                const key = el.getAttribute('data-field-key');
+                if (!key) return;
+                normalizedFields[key] = (el.value || '').trim();
             });
-            setDebug({ action: 'send_to_db_dummy', document_id: currentDocumentId, normalized_fields: payload });
-            alert('Dummy action: normalized fields prepared for DB. Check debug panel for payload.');
+
+            const keys = Object.keys(normalizedFields);
+            if (!keys.length) {
+                showError('No normalized fields available to save.');
+                return;
+            }
+
+            const invalid = keys.find((k) => !/^[A-Za-z][A-Za-z0-9_]{0,127}$/.test(k));
+            if (invalid) {
+                showError(`Invalid field key: ${invalid}`);
+                return;
+            }
+
+            const selectedType = (document.getElementById('documentType').value || currentDocumentType || '').trim();
+            if (!selectedType) {
+                showError('Document type is required before saving.');
+                return;
+            }
+
+            setBusy(true);
+            hideError();
+            hideNotice();
+            try {
+                const resp = await fetch(`/api/v1/documents/${currentDocumentId}/review`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        document_type: selectedType,
+                        normalized_fields: normalizedFields
+                    })
+                });
+                const json = await resp.json();
+                setDebug(json);
+                if (!resp.ok) {
+                    showError(json.detail || 'Failed to save reviewed fields.');
+                    showModal(json.detail || 'Failed to save reviewed fields.');
+                    return;
+                }
+                const successMsg = `Saved ${json.saved_field_count} field(s) to table ${json.table_name}.`;
+                showNotice(successMsg, 'success');
+                showModal(successMsg);
+            } catch (err) {
+                showError(`Failed to save reviewed fields: ${err.message}`);
+                showModal(`Failed to save reviewed fields: ${err.message}`);
+            } finally {
+                setBusy(false);
+            }
         }
 
         async function checkServiceStatus() {
@@ -771,14 +924,18 @@
                     const row = document.getElementById('status-' + name);
                     if (!row) return;
                     const dot = row.querySelector('.status-dot');
-                    dot.classList.remove('healthy', 'warning', 'error', 'loading');
+                    dot.classList.remove('healthy', 'warning', 'error', 'status-loading');
                     dot.classList.add(map[name]);
+                    const txt = document.getElementById('status-text-' + name);
+                    if (txt) txt.textContent = map[name];
                 });
             } catch (e) {
                 ['database', 'storage', 'celery'].forEach((name) => {
                     const dot = document.getElementById('status-' + name).querySelector('.status-dot');
-                    dot.classList.remove('healthy', 'warning', 'loading');
+                    dot.classList.remove('healthy', 'warning', 'status-loading');
                     dot.classList.add('error');
+                    const txt = document.getElementById('status-text-' + name);
+                    if (txt) txt.textContent = 'error';
                 });
             }
         }
@@ -808,6 +965,7 @@
                 }
 
                 currentDocumentId = uploadJson.document_id;
+                currentDocumentType = uploadJson.document_type || (document.getElementById('documentType').value || currentDocumentType);
                 setStep('step-upload', 'done');
                 showUploadStatus('Upload complete. Click Trigger to start processing.');
                 setDebug({ upload: uploadJson, next_step: "Click Trigger to start processing" });
@@ -822,6 +980,7 @@
             if (!hasUploadedDoc && manualDocId) {
                 currentDocumentId = manualDocId;
             }
+            currentDocumentType = (document.getElementById('documentType').value || currentDocumentType || '').trim();
             if (!currentDocumentId) {
                 showError('Upload a document first or provide an existing document ID.');
                 return;
@@ -960,7 +1119,9 @@
             buildNormalizedEditor(normalizedFields, rawFields);
 
             // Robust total-page detection from API so all pages render even when ACU JSON shape varies.
-            const totalPages = await detectTotalPagesFromApi();
+            const totalPages = Number.isInteger(data.total_pages) && data.total_pages > 0
+                ? data.total_pages
+                : await detectTotalPagesFromApi();
             setLoadingMessage('Finalizing extraction...', `Detected ${totalPages} page(s). Building viewer...`);
             await renderVisualizationPages(totalPages);
 
@@ -971,8 +1132,10 @@
 
         function resetForm() {
             currentDocumentId = null;
+            currentDocumentType = (document.getElementById('documentType').value || 'license-agreement').trim() || 'license-agreement';
             if (statusTimer) clearInterval(statusTimer);
             hideError();
+            hideNotice();
             setDebug('Ready.');
             hideUploadStatus();
             setBusy(false);
@@ -1013,6 +1176,14 @@
             const file = e.target.files && e.target.files[0];
             if (!file) return;
             try { await uploadOnly(file); } catch (err) { showError(err.message); }
+        });
+
+        resultModalOkBtn.addEventListener('click', hideModal);
+        resultModal.addEventListener('click', (e) => {
+            if (e.target === resultModal) hideModal();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') hideModal();
         });
 
         checkServiceStatus();

@@ -18,6 +18,7 @@ End-to-end document extraction pipeline using:
 - `compose.yml`: Docker services (`postgres`, `redis`, `celery-worker`)
 - `run_api.py`: local API entrypoint
 - `start_document_pipeline.py`: optional orchestrator script
+- `ops/`: analyzer scripts + database SQL assets for repeatable rollout
 
 ## Data Flow
 
@@ -48,20 +49,29 @@ AZURE_AI_ENDPOINT=...
 AZURE_AI_API_KEY=...
 ACU_ANALYZER_ID=...
 
+# Observability (OpenTelemetry -> Azure Application Insights)
+APPLICATIONINSIGHTS_CONNECTION_STRING=...
+OTEL_SERVICE_NAME=intelligent-document-processing-api
+OTEL_RESOURCE_ATTRIBUTES=deployment.environment=dev,service.namespace=idp
+OTEL_TRACES_SAMPLER=parentbased_traceidratio
+OTEL_TRACES_SAMPLER_ARG=1.0
+
 # Docker-side defaults
 PGHOST=localhost
 PGPORT=5432
 PGDATABASE=dms_meta
 PGUSER=dms
 PGPASSWORD=dms
+REDIS_URL=redis://localhost:6379/0
 ```
 
 Notes:
 
 - Do not commit `.env` or secrets.
-- For local API execution (outside Docker), Redis must be `localhost`:
-  - `REDIS_URL=redis://localhost:6379/0`
-- Inside Docker, worker uses:
+- Local host processes (API/notebooks) require:
+  - `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`, `REDIS_URL`
+- Inside Docker, `compose.yml` explicitly overrides service connectivity for worker:
+  - `PGHOST=postgres`
   - `REDIS_URL=redis://redis:6379/0`
 
 ## How To Run
@@ -69,7 +79,7 @@ Notes:
 ### 1) Start infrastructure + worker
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
 ### 2) Activate virtual environment
@@ -97,6 +107,74 @@ python run_api.py
 - Health: `http://127.0.0.1:8000/api/v1/health`
 - Docs: `http://127.0.0.1:8000/docs`
 
+## Restart (Docker + Host API)
+
+```bash
+docker compose down
+docker compose up -d --build
+```
+
+Then restart host API process:
+
+```bash
+python run_api.py
+```
+
+## Observability
+
+OTel instrumentation is wired in:
+
+- API startup (`src/api/main.py`)
+- Celery worker startup (`src/celery_app.py`)
+- Async queue propagation (`src/async_processing.py`)
+- Celery task spans (`src/tasks/pipeline_tasks.py`)
+- ACU integration spans (`src/integration/pipeline.py`)
+
+### Verify in Azure
+
+1. Open Application Insights -> `Search` (View as `Traces`).
+2. Trigger one end-to-end run (upload -> trigger -> status -> results).
+3. Confirm trace entries such as:
+   - `GET /api/v1/health`
+   - `process_document_async`
+   - `run_full_pipeline_task`
+   - `process_acu_task`
+   - `process_document_with_acu`
+
+Sample KQL:
+
+```kusto
+requests
+| where timestamp > ago(30m)
+| project timestamp, name, resultCode, duration, operation_Id, cloud_RoleName
+| order by timestamp desc
+```
+
+## Analyzer and Table Ops
+
+Use the dedicated `ops/` folder for per-document-type rollout:
+
+- Analyzer scripts:
+  - `ops/analyzers/license_agreement/create_analyzer.py`
+  - `ops/analyzers/license_agreement/update_analyzer.py`
+  - `ops/analyzers/license_agreement/schema.json`
+- SQL assets:
+  - `ops/db/reviewed_tables/reviewed_license_agreement.sql`
+  - `ops/db/migrations/`
+
+Create/update analyzer:
+
+```bash
+python ops/analyzers/license_agreement/create_analyzer.py --wait
+```
+
+Apply reviewed table SQL (example):
+
+```sql
+-- Run the contents of this file in DBeaver SQL editor:
+-- ops/db/reviewed_tables/reviewed_license_agreement.sql
+```
+
 ## UI Usage
 
 1. Choose file (uploads only)
@@ -113,6 +191,11 @@ python run_api.py
 - Worker orange in UI but tasks run
   - Usually API process env mismatch or stale API process
   - Ensure API uses `REDIS_URL=redis://localhost:6379/0`
+
+- No traces in Application Insights
+  - Ensure `APPLICATIONINSIGHTS_CONNECTION_STRING` is set in environment where API/worker run.
+  - Restart both API and worker after env changes.
+  - Verify requests appear first (`/api/v1/health`) before checking task spans.
 
 - `ContainerAlreadyExists` log spam
   - Benign; container-existence check is now one-time per process

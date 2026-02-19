@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import tempfile
 import io
 from datetime import datetime, timezone
@@ -12,6 +13,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import fitz
+import psycopg2
+from psycopg2 import sql
+from psycopg2.extras import Json
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from opentelemetry import trace
@@ -22,6 +26,8 @@ from .models import (
     DocumentUploadResponse,
     HealthCheckResponse,
     ProcessingStatus,
+    SaveReviewRequest,
+    SaveReviewResponse,
 )
 from ..async_processing import AsyncDocumentProcessor
 from ..celery_app import celery_app
@@ -33,6 +39,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 app_config = AppConfig()
 tracer = trace.get_tracer(__name__)
+_FIELD_KEY_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,127}$")
 
 
 def _set_span_attrs(attributes: Dict[str, Any]) -> None:
@@ -80,6 +87,39 @@ def _new_processor() -> AsyncDocumentProcessor:
         return AsyncDocumentProcessor()
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Processor unavailable: {exc}") from exc
+
+
+def _sanitize_table_suffix(document_type: str) -> str:
+    normalized = re.sub(r"[^a-zA-Z0-9]+", "_", document_type.strip().lower()).strip("_")
+    if not normalized:
+        raise HTTPException(status_code=400, detail="Invalid document_type")
+    if len(normalized) > 48:
+        normalized = normalized[:48]
+    return normalized
+
+
+def _validate_normalized_fields(normalized_fields: Dict[str, str]) -> Dict[str, str]:
+    if not isinstance(normalized_fields, dict) or not normalized_fields:
+        raise HTTPException(status_code=400, detail="normalized_fields must be a non-empty object")
+
+    cleaned: Dict[str, str] = {}
+    for key, value in normalized_fields.items():
+        if not isinstance(key, str) or not _FIELD_KEY_PATTERN.match(key):
+            raise HTTPException(status_code=400, detail=f"Invalid field key: {key!r}")
+
+        if value is None:
+            cleaned[key] = ""
+            continue
+
+        if not isinstance(value, str):
+            value = str(value)
+
+        value = value.strip()
+        if len(value) > 10000:
+            raise HTTPException(status_code=400, detail=f"Value too long for field: {key}")
+        cleaned[key] = value
+
+    return cleaned
 
 
 def _upload_and_fetch_status(*, payload: bytes, filename: str, document_type: str) -> Dict[str, Any]:
@@ -372,6 +412,100 @@ def get_document_results(document_id: str) -> DocumentResultsResponse:
         acu_result=parsed,
         extracted_fields=_extract_fields_from_payload(parsed),
         has_visualization=has_visualization,
+    )
+
+
+@router.post("/documents/{document_id}/review", response_model=SaveReviewResponse)
+def save_reviewed_normalized_fields(
+    document_id: str,
+    payload: SaveReviewRequest,
+) -> SaveReviewResponse:
+    _set_span_attrs(
+        {
+            "idp.operation": "save_reviewed_normalized_fields",
+            "idp.document_id": document_id,
+            "idp.document_type": payload.document_type,
+        }
+    )
+
+    proc = _new_processor()
+    doc = proc.dms_service.get_document(document_id=document_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if str(doc.get("processing_status", "")).lower() != "done":
+        raise HTTPException(status_code=409, detail="Document must be completed before saving reviewed fields")
+
+    selected_document_type = payload.document_type.strip()
+    if not selected_document_type:
+        raise HTTPException(status_code=400, detail="document_type is required")
+
+    actual_document_type = str(doc.get("document_type") or "").strip()
+    if actual_document_type and selected_document_type.lower() != actual_document_type.lower():
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"document_type mismatch. Selected '{selected_document_type}' "
+                f"but document is '{actual_document_type}'"
+            ),
+        )
+
+    normalized_fields = _validate_normalized_fields(payload.normalized_fields)
+    table_name = f"reviewed_{_sanitize_table_suffix(selected_document_type)}"
+
+    cfg = AppConfig()
+    conn = None
+    try:
+        conn = psycopg2.connect(**cfg.database.psycopg2_dsn)
+        conn.autocommit = True
+        with conn.cursor() as cursor:
+            cursor.execute(
+                sql.SQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS {} (
+                        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                        document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+                        document_type VARCHAR(100) NOT NULL,
+                        normalized_fields JSONB NOT NULL,
+                        source VARCHAR(30) NOT NULL DEFAULT 'ui-review',
+                        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+                    )
+                    """
+                ).format(sql.Identifier(table_name))
+            )
+
+            cursor.execute(
+                sql.SQL(
+                    """
+                    INSERT INTO {} (document_id, document_type, normalized_fields)
+                    VALUES (%s, %s, %s)
+                    RETURNING id
+                    """
+                ).format(sql.Identifier(table_name)),
+                (document_id, selected_document_type, Json(normalized_fields)),
+            )
+            row = cursor.fetchone()
+            if not row:
+                raise HTTPException(status_code=500, detail="Failed to persist reviewed fields")
+            record_id = str(row[0])
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Failed to persist reviewed fields for document %s", document_id)
+        raise HTTPException(status_code=500, detail=f"Failed to persist reviewed fields: {exc}") from exc
+    finally:
+        if conn is not None:
+            conn.close()
+
+    _set_span_attrs({"idp.saved_field_count": len(normalized_fields), "idp.review_table": table_name})
+
+    return SaveReviewResponse(
+        document_id=document_id,
+        document_type=selected_document_type,
+        table_name=table_name,
+        record_id=record_id,
+        saved_field_count=len(normalized_fields),
     )
 
 

@@ -22,12 +22,14 @@ Quick-start the local app stack from notebook cells:
 5. Start API process via `run_api.py`
 6. Poll `/api/v1/health` until ready
 7. Print/open UI and docs URLs
+8. Verify traces in Application Insights (API + Celery)
 
 ## Prerequisites
 
 - Docker Desktop running
 - Python venv active with project dependencies
 - `.env` configured
+- `.env` includes `APPLICATIONINSIGHTS_CONNECTION_STRING` for telemetry export
 
 Recommended for host API in notebook session:
 
@@ -41,3 +43,6 @@ Recommended for host API in notebook session:
   - call `127.0.0.1` from notebook/client
 - Celery worker permission/pool issues on Windows host
   - prefer Docker worker for stability
+- No telemetry appears in Azure
+  - restart API and Celery after setting OTel env vars
+  - verify `/api/v1/health` trace appears first in Application Insights

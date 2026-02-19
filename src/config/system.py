@@ -3,6 +3,17 @@
 import os
 from dataclasses import dataclass
 from urllib.parse import urlparse
+from dotenv import load_dotenv
+
+
+load_dotenv()
+
+
+def _required_env(name: str) -> str:
+    value = os.getenv(name, "").strip()
+    if not value:
+        raise RuntimeError(f"Missing required environment variable: {name}")
+    return value
 
 
 # -------------------------
@@ -107,23 +118,25 @@ class AppConfig:
 
         # 🟢 PostgreSQL
         self.database = DatabaseConfig(
-            host=os.getenv("PGHOST", "localhost"),
-            port=int(os.getenv("PGPORT", "5432")),
-            name=os.getenv("PGDATABASE", "credit_ocr"),
-            user=os.getenv("PGUSER", "postgres"),
-            password=os.getenv("PGPASSWORD", "postgres"),
+            host=_required_env("PGHOST"),
+            port=int(_required_env("PGPORT")),
+            name=_required_env("PGDATABASE"),
+            user=_required_env("PGUSER"),
+            password=_required_env("PGPASSWORD"),
         )
 
         # 🟡 Redis (for Celery)
-        redis_url = os.getenv("REDIS_URL", "").strip()
-        redis_host = os.getenv("REDIS_HOST", "localhost")
-        redis_port = int(os.getenv("REDIS_PORT", "6379"))
+        redis_url = _required_env("REDIS_URL")
+        redis_host = _required_env("REDIS_HOST") if os.getenv("REDIS_HOST") else ""
+        redis_port = int(_required_env("REDIS_PORT")) if os.getenv("REDIS_PORT") else 0
         if redis_url:
             parsed = urlparse(redis_url)
             if parsed.hostname:
                 redis_host = parsed.hostname
             if parsed.port:
                 redis_port = parsed.port
+        if not redis_host or not redis_port:
+            raise RuntimeError("REDIS_URL must include host and port")
         self.redis = RedisConfig(host=redis_host, port=redis_port)
 
         # 🔴 ACU (Azure Content Understanding)

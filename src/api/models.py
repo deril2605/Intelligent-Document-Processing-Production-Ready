@@ -40,6 +40,7 @@ class DocumentResultsResponse(BaseModel):
     acu_result: Dict[str, Any] = Field(default_factory=dict)
     extracted_fields: Dict[str, Any] = Field(default_factory=dict)
     has_visualization: bool = False
+    total_pages: Optional[int] = None
 
 
 class ErrorResponse(BaseModel):
@@ -52,3 +53,16 @@ class HealthCheckResponse(BaseModel):
     status: str
     timestamp: datetime
     services: Dict[str, str]
+
+
+class SaveReviewRequest(BaseModel):
+    document_type: str
+    normalized_fields: Dict[str, str] = Field(default_factory=dict)
+
+
+class SaveReviewResponse(BaseModel):
+    document_id: str
+    document_type: str
+    table_name: str
+    record_id: str
+    saved_field_count: int

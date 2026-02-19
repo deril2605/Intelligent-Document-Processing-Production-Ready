@@ -15,6 +15,7 @@ from opentelemetry import trace
 from opentelemetry.propagate import extract, inject
 
 from src.celery_app import celery_app
+from src.config import AppConfig
 from src.dms.service import DmsService
 from src.dms.adapters import AzureBlobStorageClient, PostgresMetadataRepository
 
@@ -30,19 +31,14 @@ load_dotenv()
 
 def _get_dms_service() -> DmsService:
     """Create a DmsService instance for Celery workers (Azure Blob cloud + Postgres)."""
+    cfg = AppConfig()
     conn_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
     if not conn_str:
         raise RuntimeError("Missing AZURE_STORAGE_CONNECTION_STRING")
 
     blob_service_client = BlobServiceClient.from_connection_string(conn_str)
 
-    pg_conn = psycopg2.connect(
-        host=os.getenv("PGHOST", "localhost"),
-        port=int(os.getenv("PGPORT", "5432")),
-        dbname=os.getenv("PGDATABASE", "dms_meta"),
-        user=os.getenv("PGUSER", "dms"),
-        password=os.getenv("PGPASSWORD", "dms"),
-    )
+    pg_conn = psycopg2.connect(**cfg.database.psycopg2_dsn)
     try:
         pg_conn.autocommit = True
     except Exception:

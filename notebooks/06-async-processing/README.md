@@ -36,6 +36,7 @@ Polled values include:
 - `processing_status` transitions to `done`
 - latest extraction job status becomes `done`
 - `acu_result_blob_path` is populated
+- trace chain is visible in Application Insights for Celery tasks
 
 ## Common Issues
 
@@ -45,3 +46,7 @@ Polled values include:
   - ACU credentials/analyzer misconfigured
 - `ContainerAlreadyExists` logs:
   - benign; container already exists
+
+- Celery tasks run but no traces in Azure:
+  - ensure `APPLICATIONINSIGHTS_CONNECTION_STRING` is available to the worker environment
+  - restart worker after env changes
