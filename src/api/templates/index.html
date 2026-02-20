@@ -5,37 +5,57 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Intelligent Document Processing</title>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap');
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         :root {
             --bg-a: #0f172a;
             --bg-b: #1e293b;
-            --accent-a: #0ea5e9;
-            --accent-b: #22c55e;
+            --accent-a: #0f62fe;
+            --accent-b: #0ea5e9;
             --card: #ffffff;
-            --muted: #64748b;
-            --text: #0f172a;
+            --muted: #5f6f85;
+            --text: #12233d;
             --ok: #16a34a;
             --warn: #d97706;
             --bad: #dc2626;
         }
 
         body {
-            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            font-family: "Manrope", "Segoe UI", sans-serif;
             min-height: 100vh;
-            padding: 2rem;
-            color: #e2e8f0;
+            padding: 1.5rem;
+            color: #123;
             background:
-                radial-gradient(circle at 20% 20%, rgba(14,165,233,.28), transparent 32%),
-                radial-gradient(circle at 80% 0%, rgba(34,197,94,.22), transparent 30%),
+                radial-gradient(circle at 12% 10%, rgba(14,165,233,.26), transparent 36%),
+                radial-gradient(circle at 92% 0%, rgba(15,98,254,.24), transparent 30%),
                 linear-gradient(135deg, var(--bg-a), var(--bg-b));
         }
 
-        .container { max-width: 1360px; margin: 0 auto; }
+        .container { max-width: 1480px; margin: 0 auto; }
 
-        .header { text-align: center; margin-bottom: 2rem; }
-        .header h1 { font-size: 2.35rem; font-weight: 700; letter-spacing: .2px; }
-        .header p { margin-top: .5rem; color: #cbd5e1; }
+        .header {
+            text-align: center;
+            margin-bottom: 1.2rem;
+            border: 1px solid rgba(255,255,255,.22);
+            border-radius: 16px;
+            background: rgba(255,255,255,.1);
+            backdrop-filter: blur(8px);
+            box-shadow: 0 14px 34px rgba(2, 6, 23, .22);
+            padding: 1.2rem 1rem 1rem;
+        }
+        .header h1 {
+            font-size: 2.1rem;
+            font-weight: 800;
+            font-family: "Space Grotesk", "Manrope", sans-serif;
+            letter-spacing: .2px;
+            color: #f8fafc;
+        }
+        .header p {
+            margin-top: .45rem;
+            color: #dbeafe;
+            font-size: .98rem;
+        }
 
         .service-status {
             margin: 1.25rem auto 0;
@@ -44,10 +64,9 @@
             flex-wrap: wrap;
             gap: .9rem;
             padding: .8rem 1rem;
-            border: 1px solid rgba(255,255,255,.2);
+            border: 1px solid rgba(255,255,255,.24);
             border-radius: 12px;
-            background: rgba(255,255,255,.08);
-            backdrop-filter: blur(8px);
+            background: rgba(255,255,255,.1);
         }
 
         .status-item {
@@ -55,7 +74,7 @@
             align-items: center;
             gap: .5rem;
             font-size: .92rem;
-            color: #f8fafc;
+            color: #eff6ff;
         }
 
         .status-dot { width: 11px; height: 11px; border-radius: 999px; }
@@ -65,7 +84,7 @@
         .error { background: var(--bad); box-shadow: 0 0 8px rgba(220,38,38,.7); }
         .status-text {
             font-size: .78rem;
-            color: #cbd5e1;
+            color: #dbeafe;
             text-transform: uppercase;
             letter-spacing: .2px;
         }
@@ -73,35 +92,41 @@
         .card {
             background: var(--card);
             color: var(--text);
-            border-radius: 14px;
+            border-radius: 16px;
             overflow: hidden;
-            box-shadow: 0 20px 45px rgba(2, 6, 23, .35);
+            border: 1px solid #d8e3f2;
+            box-shadow: 0 14px 30px rgba(15, 35, 61, .08);
             margin-bottom: 1.2rem;
         }
 
         .card-header {
-            background: #f8fafc;
-            border-bottom: 1px solid #e2e8f0;
-            padding: 1rem 1.3rem;
+            background: linear-gradient(180deg, #ffffff 0%, #f5f9ff 100%);
+            border-bottom: 1px solid #dbe6f5;
+            padding: 1rem 1.1rem;
         }
 
-        .card-header h2 { font-size: 1.2rem; }
+        .card-header h2 {
+            font-size: 1.15rem;
+            font-weight: 800;
+            color: #153154;
+            letter-spacing: .1px;
+        }
 
-        .card-body { padding: 1.4rem; }
+        .card-body { padding: 1.1rem; }
 
         .upload-area {
-            border: 2px dashed #cbd5e1;
-            border-radius: 10px;
+            border: 2px dashed #b6cae6;
+            border-radius: 12px;
             text-align: center;
             padding: 2.2rem 1rem;
             transition: .25s ease;
             cursor: pointer;
-            background: #ffffff;
+            background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
         }
 
         .upload-area:hover, .upload-area.dragover {
-            border-color: var(--accent-a);
-            background: #f0f9ff;
+            border-color: #0f62fe;
+            background: #edf5ff;
         }
 
         .upload-icon { font-size: 2rem; color: #64748b; margin-bottom: .7rem; }
@@ -123,6 +148,11 @@
             gap: .8rem;
             align-items: end;
         }
+        #typeControls {
+            grid-template-columns: minmax(320px, 420px) auto;
+            align-items: end;
+            gap: .65rem;
+        }
         .field-block {
             display: flex;
             flex-direction: column;
@@ -133,6 +163,65 @@
             color: #334155;
             font-weight: 700;
         }
+        .classification-box {
+            margin-top: .7rem;
+            border: 1px solid #cfe0f8;
+            border-radius: 10px;
+            padding: .8rem .85rem;
+            background: #f5f9ff;
+            color: #153154;
+            font-size: 1rem;
+            font-weight: 600;
+            line-height: 1.4;
+        }
+        .classification-list {
+            margin-top: .45rem;
+            padding-left: 1.1rem;
+            color: #334155;
+            font-size: .95rem;
+        }
+        .classification-list li { margin: .16rem 0; }
+        .flow-section {
+            margin-top: .95rem;
+            border: 1px solid #dae5f4;
+            border-radius: 12px;
+            padding: .85rem .9rem;
+            background: linear-gradient(180deg, #ffffff 0%, #f9fcff 100%);
+            transition: box-shadow .2s ease, transform .2s ease, border-color .2s ease;
+        }
+        .flow-section:hover {
+            border-color: #bcd1ef;
+            box-shadow: 0 10px 20px rgba(15, 35, 61, .06);
+            transform: translateY(-1px);
+        }
+        .or-divider {
+            margin: .9rem 0 .25rem;
+            text-align: center;
+            color: #64748b;
+            font-size: .82rem;
+            font-weight: 700;
+            letter-spacing: .08em;
+        }
+        .or-divider span {
+            display: inline-block;
+            padding: .2rem .65rem;
+            border: 1px solid #cbd5e1;
+            border-radius: 999px;
+            background: #f8fafc;
+        }
+        .flow-section h3 {
+            font-size: 1rem;
+            margin-bottom: .25rem;
+            color: #0f172a;
+        }
+        .flow-help {
+            color: #475569;
+            font-size: .86rem;
+            margin-bottom: .6rem;
+        }
+        .hidden-block {
+            display: none;
+        }
         .action-btns {
             display: flex;
             gap: .55rem;
@@ -140,19 +229,32 @@
         }
 
         .input {
-            border: 1px solid #cbd5e1;
-            border-radius: 8px;
-            padding: .58rem .65rem;
+            border: 1px solid #c2d2ea;
+            border-radius: 10px;
+            padding: .7rem .72rem;
             min-width: 210px;
+            outline: none;
+            font-family: inherit;
+            font-size: 1rem;
+            font-weight: 600;
+        }
+        .input:focus {
+            border-color: #0f62fe;
+            box-shadow: 0 0 0 3px rgba(15, 98, 254, .14);
+        }
+        #documentType {
+            min-height: 44px;
+            font-size: 1.02rem;
         }
 
         .btn {
             border: none;
-            border-radius: 8px;
+            border-radius: 10px;
             padding: .65rem 1rem;
-            font-weight: 600;
+            font-weight: 700;
             cursor: pointer;
             transition: .2s ease;
+            font-family: inherit;
         }
         .btn:disabled {
             opacity: .6;
@@ -161,28 +263,35 @@
 
         .btn-primary {
             color: #fff;
-            background: linear-gradient(135deg, var(--accent-a), #2563eb);
+            background: linear-gradient(135deg, #0f62fe, #0ea5e9);
+            box-shadow: 0 8px 16px rgba(15,98,254,.24);
         }
-        .btn-primary:hover { transform: translateY(-1px); }
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 20px rgba(15,98,254,.28);
+        }
 
         .btn-secondary {
-            color: #0f172a;
-            background: #e2e8f0;
+            color: #12325a;
+            background: #e6eef9;
         }
+        .btn-secondary:hover { background: #dbe8f9; }
 
         .loading-wrap { text-align: center; display: none; margin-top: 1rem; }
         .upload-wrap {
-            text-align: center;
+            text-align: left;
             display: none;
-            margin-top: 1rem;
-            padding: .7rem;
+            margin-top: .75rem;
+            padding: .75rem .85rem;
             border: 1px solid #dbeafe;
             border-radius: 10px;
             background: #eff6ff;
             color: #1d4ed8;
+            font-weight: 700;
+            max-width: 520px;
         }
         .upload-inline {
-            margin: 0 auto .5rem;
+            margin: 0 0 .5rem;
             width: 20px;
             height: 20px;
             border-radius: 50%;
@@ -294,23 +403,28 @@
             display: grid;
             grid-template-columns: 1fr 1.7fr;
             gap: 1rem;
+            align-items: start;
         }
         .results-bottom {
             margin-top: 1rem;
         }
 
         .panel {
-            border: 1px solid #e2e8f0;
-            border-radius: 10px;
+            border: 1px solid #d8e4f4;
+            border-radius: 12px;
             padding: .85rem;
-            background: #fff;
+            background: #fdfefe;
         }
 
-        .panel h3 { margin-bottom: .55rem; }
+        .panel h3 {
+            margin-bottom: .55rem;
+            color: #143459;
+            font-weight: 800;
+        }
         .field-list { list-style: none; display: grid; gap: .45rem; }
         .field-item {
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
+            border: 1px solid #d8e4f4;
+            border-radius: 10px;
             padding: .5rem .6rem;
             display: flex;
             justify-content: space-between;
@@ -318,10 +432,11 @@
             font-size: .92rem;
             cursor: pointer;
             transition: .15s ease;
+            background: #fff;
         }
         .field-item:hover {
-            border-color: #93c5fd;
-            background: #eff6ff;
+            border-color: #9fc2f2;
+            background: #f1f7ff;
         }
 
         .field-name { font-weight: 700; color: #1e293b; }
@@ -342,10 +457,10 @@
             color: #64748b;
         }
         .review-wrap {
-            border: 1px solid #e2e8f0;
-            border-radius: 10px;
+            border: 1px solid #d6e3f3;
+            border-radius: 12px;
             padding: .8rem;
-            background: #f8fafc;
+            background: #f4f8ff;
         }
         .review-row {
             display: grid;
@@ -383,15 +498,15 @@
             min-height: 620px;
             overflow-y: auto;
             overflow-x: hidden;
-            padding-right: .25rem;
+            padding-right: .35rem;
             display: grid;
             gap: .8rem;
         }
         .page-card {
-            border: 1px solid #e2e8f0;
-            border-radius: 10px;
+            border: 1px solid #d8e4f4;
+            border-radius: 12px;
             background: #fff;
-            padding: .55rem;
+            padding: .6rem;
             scroll-margin-top: 10px;
             overflow: visible;
         }
@@ -461,12 +576,14 @@
         @keyframes spin { to { transform: rotate(360deg); } }
 
         @media (max-width: 820px) {
-            body { padding: 1rem; }
+            body { padding: .8rem; }
             .results-grid { grid-template-columns: 1fr; }
             .header h1 { font-size: 1.9rem; }
             .review-row { grid-template-columns: 1fr; }
             .review-conf { text-align: left; }
             .action-grid { grid-template-columns: 1fr; }
+            .card-body { padding: .9rem; }
+            #typeControls { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -486,33 +603,55 @@
         <div class="card" id="uploadCard">
             <div class="card-header"><h2>Upload</h2></div>
             <div class="card-body">
-                <div class="upload-area" id="uploadArea">
-                    <div class="upload-icon">Upload</div>
-                    <div class="upload-text"><strong>Drop a file here</strong> or click to browse</div>
-                    <input id="fileInput" class="file-input" type="file" accept=".pdf,.png,.jpg,.jpeg">
-                    <button class="btn btn-primary" id="chooseFileBtn" type="button">Choose File</button>
-                </div>
-
-                <div class="action-grid">
-                    <div class="field-block">
-                        <label class="field-label" for="documentType">Document Type</label>
-                        <input id="documentType" class="input" value="license-agreement" placeholder="e.g. license-agreement">
+                <div class="flow-section">
+                    <h3>1) Upload New Document</h3>
+                    <div class="flow-help">Upload a file to start classification. After classification completes, you can optionally override detected type and trigger extraction.</div>
+                    <div class="upload-area" id="uploadArea">
+                        <div class="upload-icon">Upload</div>
+                        <div class="upload-text"><strong>Drop a file here</strong> or click to browse</div>
+                        <input id="fileInput" class="file-input" type="file" accept=".pdf,.png,.jpg,.jpeg">
+                        <button class="btn btn-primary" id="chooseFileBtn" type="button">Choose File</button>
                     </div>
-                    <div class="field-block">
-                        <label class="field-label" for="existingDocId">Existing Document ID (Optional)</label>
-                        <input id="existingDocId" class="input" placeholder="Paste a document ID to reuse stored results">
+                    <div class="upload-wrap" id="uploadWrap">
+                        <div class="upload-inline"></div>
+                        <div id="uploadStatusText">Uploading document...</div>
                     </div>
-                    <div class="field-block">
-                        <label class="field-label">&nbsp;</label>
-                        <div class="action-btns">
-                            <button class="btn btn-secondary" id="triggerBtn" type="button" onclick="triggerCurrent()">Trigger Processing</button>
+                    <div class="action-grid hidden-block" id="typeControls">
+                        <div class="field-block">
+                            <label class="field-label" for="documentType">Detected Type (Override Optional)</label>
+                            <select id="documentType" class="input">
+                                <option value="license-agreement">license-agreement</option>
+                            </select>
+                        </div>
+                        <div class="field-block">
+                            <label class="field-label">&nbsp;</label>
+                            <div class="action-btns">
+                                <button class="btn btn-secondary" id="triggerBtn" type="button" onclick="triggerCurrent()">Trigger Processing</button>
+                            </div>
                         </div>
                     </div>
+                    <div class="classification-box" id="classificationInfo">Classification: waiting for upload.</div>
+                    <ul class="classification-list hidden-block" id="classificationCandidates"></ul>
                 </div>
 
-                <div class="upload-wrap" id="uploadWrap">
-                    <div class="upload-inline"></div>
-                    <div id="uploadStatusText">Uploading document...</div>
+                <div class="or-divider"><span>OR</span></div>
+
+                <div class="flow-section">
+                    <h3>2) Use Existing Document ID</h3>
+                    <div class="flow-help">Use this when you already have a document ID and want to trigger or reuse processing without uploading again.</div>
+                    <div class="action-grid" style="margin-top:0;">
+                        <div class="field-block">
+                            <label class="field-label" for="existingDocId">Existing Document ID</label>
+                            <input id="existingDocId" class="input" placeholder="Paste a document ID to reuse stored results">
+                        </div>
+                        <div class="field-block">
+                            <label class="field-label">&nbsp;</label>
+                            <div class="action-btns">
+                                <button class="btn btn-secondary" id="triggerExistingBtn" type="button" onclick="triggerExistingOnly()">Trigger Existing Document</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="classification-box" id="existingInfo">Existing ID flow: idle.</div>
                 </div>
 
                 <div class="loading-wrap" id="loadingWrap">
@@ -581,6 +720,7 @@
     <script>
         let currentDocumentId = null;
         let currentDocumentType = 'license-agreement';
+        let supportedDocumentTypes = [];
         let statusTimer = null;
 
         const uploadArea = document.getElementById('uploadArea');
@@ -590,12 +730,18 @@
         const uploadStatusText = document.getElementById('uploadStatusText');
         const chooseFileBtn = document.getElementById('chooseFileBtn');
         const triggerBtn = document.getElementById('triggerBtn');
+        const triggerExistingBtn = document.getElementById('triggerExistingBtn');
+        const typeControls = document.getElementById('typeControls');
         const existingDocId = document.getElementById('existingDocId');
         const errorBox = document.getElementById('errorBox');
         const noticeBox = document.getElementById('noticeBox');
         const debugOutput = document.getElementById('debugOutput');
         const uploadCard = document.getElementById('uploadCard');
         const resultsCard = document.getElementById('resultsCard');
+        const classificationInfo = document.getElementById('classificationInfo');
+        const classificationCandidates = document.getElementById('classificationCandidates');
+        const existingInfo = document.getElementById('existingInfo');
+        const documentTypeSelect = document.getElementById('documentType');
         const fieldsList = document.getElementById('fieldsList');
         const normalizedEditor = document.getElementById('normalizedEditor');
         const statusBadge = document.getElementById('statusBadge');
@@ -612,8 +758,9 @@
         function setBusy(isBusy) {
             fileInput.disabled = isBusy;
             chooseFileBtn.disabled = isBusy;
-            triggerBtn.disabled = isBusy;
-            document.getElementById('documentType').disabled = isBusy;
+            if (triggerBtn) triggerBtn.disabled = isBusy;
+            if (triggerExistingBtn) triggerExistingBtn.disabled = isBusy;
+            documentTypeSelect.disabled = isBusy || !currentDocumentId;
             existingDocId.disabled = isBusy;
         }
 
@@ -672,6 +819,90 @@
         function setLoadingMessage(title, description) {
             document.getElementById('loadingTitle').textContent = title;
             document.getElementById('loadingDescription').textContent = description;
+        }
+
+        function setClassificationInfo(text) {
+            classificationInfo.textContent = text;
+        }
+
+        function renderClassificationCandidates(candidates) {
+            classificationCandidates.innerHTML = '';
+            if (!Array.isArray(candidates) || !candidates.length) {
+                classificationCandidates.style.display = 'none';
+                return;
+            }
+            const top = candidates.slice(0, 5);
+            top.forEach((c) => {
+                const li = document.createElement('li');
+                const name = String(c.document_type || 'unknown');
+                const conf = typeof c.confidence === 'number' ? ` (${(c.confidence * 100).toFixed(1)}%)` : '';
+                li.textContent = `${name}${conf}`;
+                classificationCandidates.appendChild(li);
+            });
+            classificationCandidates.style.display = 'block';
+        }
+
+        function setExistingInfo(text) {
+            existingInfo.textContent = text;
+        }
+
+        function normalizeType(v) {
+            return String(v || '').trim().toLowerCase();
+        }
+
+        function ensureTypeOption(type, label) {
+            const value = normalizeType(type);
+            if (!value) return;
+            const existing = Array.from(documentTypeSelect.options).find((o) => normalizeType(o.value) === value);
+            if (existing) {
+                if (label) existing.textContent = label;
+                return;
+            }
+            const opt = document.createElement('option');
+            opt.value = value;
+            opt.textContent = label || value;
+            documentTypeSelect.appendChild(opt);
+        }
+
+        function populateDocumentTypeSelect(candidates, selectedType) {
+            documentTypeSelect.innerHTML = '';
+            const candidateList = Array.isArray(candidates) ? candidates : [];
+            const seen = new Set();
+
+            candidateList.forEach((c) => {
+                const type = normalizeType(c.document_type);
+                if (!type || seen.has(type)) return;
+                seen.add(type);
+                const conf = typeof c.confidence === 'number' ? ` (${(c.confidence * 100).toFixed(1)}%)` : '';
+                ensureTypeOption(type, `${type}${conf}`);
+            });
+
+            supportedDocumentTypes.forEach((t) => {
+                const type = normalizeType(t);
+                if (!type || seen.has(type)) return;
+                seen.add(type);
+                ensureTypeOption(type, type);
+            });
+
+            const normalizedSelected = normalizeType(selectedType);
+            if (normalizedSelected && !seen.has(normalizedSelected)) {
+                ensureTypeOption(normalizedSelected, normalizedSelected);
+            }
+            if (normalizedSelected) {
+                documentTypeSelect.value = normalizedSelected;
+            } else if (documentTypeSelect.options.length) {
+                documentTypeSelect.selectedIndex = 0;
+            }
+        }
+
+        function extractApiErrorMessage(payload, fallback) {
+            if (!payload) return fallback;
+            const detail = typeof payload.detail === 'string' ? payload.detail.trim() : '';
+            const message = typeof payload.message === 'string' ? payload.message.trim() : '';
+            if (detail && !detail.toLowerCase().startsWith('path:')) return detail;
+            if (message) return message;
+            if (detail.toLowerCase().startsWith('path:')) return 'Requested resource was not found.';
+            return fallback;
         }
 
         function parseHealth(status) {
@@ -941,6 +1172,17 @@
             }
         }
 
+        async function loadDocumentTypes() {
+            try {
+                const res = await fetch('/api/v1/document-types');
+                const data = await res.json();
+                supportedDocumentTypes = Array.isArray(data.document_types) ? data.document_types : [];
+                populateDocumentTypeSelect([], currentDocumentType);
+            } catch (e) {
+                // no-op; manual entry still works
+            }
+        }
+
         async function uploadOnly(file) {
             hideError();
             setBusy(true);
@@ -953,7 +1195,7 @@
 
             const formData = new FormData();
             formData.append('file', file);
-            formData.append('document_type', document.getElementById('documentType').value || 'general');
+            formData.append('document_type', currentDocumentType || 'general');
 
             try {
                 const uploadResp = await fetch('/api/v1/upload', { method: 'POST', body: formData });
@@ -966,7 +1208,26 @@
                 }
 
                 currentDocumentId = uploadJson.document_id;
-                currentDocumentType = uploadJson.document_type || (document.getElementById('documentType').value || currentDocumentType);
+                currentDocumentType = normalizeType(uploadJson.document_type || currentDocumentType);
+                typeControls.style.display = 'grid';
+                populateDocumentTypeSelect(uploadJson.classification_candidates || [], currentDocumentType);
+                const conf = typeof uploadJson.classifier_confidence === 'number'
+                    ? ` (${(uploadJson.classifier_confidence * 100).toFixed(1)}%)`
+                    : '';
+                if ((uploadJson.classification_status || '').toLowerCase() === 'failed') {
+                    const reason = uploadJson.classification_error
+                        ? ` Reason: ${uploadJson.classification_error}`
+                        : '';
+                    setClassificationInfo(
+                        `Classification failed, fallback type is ${uploadJson.classified_document_type || currentDocumentType}.${reason} You can override before trigger.`
+                    );
+                    showNotice('Classifier failed. Please review selected document type before trigger.', 'error');
+                } else {
+                    setClassificationInfo(
+                        `Classification: ${uploadJson.classification_status || 'unknown'} -> ${uploadJson.classified_document_type || currentDocumentType}${conf}. You can override before trigger.`
+                    );
+                }
+                renderClassificationCandidates(uploadJson.classification_candidates || []);
                 setStep('step-upload', 'done');
                 showUploadStatus('Upload complete. Click Trigger to start processing.');
                 setDebug({ upload: uploadJson, next_step: "Click Trigger to start processing" });
@@ -981,34 +1242,100 @@
             if (!hasUploadedDoc && manualDocId) {
                 currentDocumentId = manualDocId;
             }
-            currentDocumentType = (document.getElementById('documentType').value || currentDocumentType || '').trim();
+            currentDocumentType = normalizeType(documentTypeSelect.value || currentDocumentType);
             if (!currentDocumentId) {
                 showError('Upload a document first or provide an existing document ID.');
                 return;
             }
             setBusy(true);
             setStep('step-trigger', 'active');
-            const reuseExisting = !hasUploadedDoc && !!manualDocId;
-            showUploadStatus(reuseExisting ? 'Reusing existing ACU result...' : 'Triggering processing...');
+            showUploadStatus('Triggering processing...');
             try {
-                const triggerUrl = reuseExisting
-                    ? `/api/v1/documents/${currentDocumentId}/trigger?reuse_existing=true`
-                    : `/api/v1/documents/${currentDocumentId}/trigger`;
+                const triggerUrl = `/api/v1/documents/${currentDocumentId}/trigger?document_type_override=${encodeURIComponent(currentDocumentType)}`;
                 const res = await fetch(triggerUrl, { method: 'POST' });
                 const json = await res.json();
                 setDebug(json);
                 if (!res.ok) {
-                    showError(json.detail || 'Trigger failed.');
+                    const errMsg = extractApiErrorMessage(json, 'Trigger failed.');
+                    if (errMsg === 'Could not trigger processing for document') {
+                        try {
+                            const statusResp = await fetch(`/api/v1/documents/${currentDocumentId}/status`);
+                            const statusJson = await statusResp.json();
+                            if (statusResp.ok && (statusJson.status === 'completed' || statusJson.processing_status === 'done')) {
+                                hideUploadStatus();
+                                loadingWrap.style.display = 'block';
+                                setLoadingMessage('Loading existing results...', 'This document is already processed.');
+                                showNotice('Document already processed. Loading existing results.', 'success');
+                                await loadResults();
+                                return;
+                            }
+                        } catch (e) {
+                            // ignore fallback errors and show original trigger error
+                        }
+                    }
+                    hideUploadStatus();
+                    loadingWrap.style.display = 'none';
+                    showError(errMsg);
                     setStep('step-trigger', null);
                     return;
                 }
                 setStep('step-trigger', 'done');
                 hideUploadStatus();
                 loadingWrap.style.display = 'block';
+                if (json.document_type) {
+                    currentDocumentType = normalizeType(json.document_type);
+                    populateDocumentTypeSelect([], currentDocumentType);
+                    setClassificationInfo(`Final document type selected: ${currentDocumentType}`);
+                }
                 startPolling();
             } finally {
                 setBusy(false);
             }
+        }
+
+        async function triggerExistingOnly() {
+            currentDocumentId = null;
+            hideError();
+            const docId = existingDocId.value.trim();
+            if (!docId) {
+                showError('Please enter a document ID.');
+                setExistingInfo('Please enter a document ID.');
+                return;
+            }
+            try {
+                const probe = await fetch(`/api/v1/documents/${docId}/status`);
+                const probeJson = await probe.json();
+                if (!probe.ok) {
+                    showError('Unable to find a document for this ID. Please verify and try again.');
+                    setExistingInfo('No document found for this ID.');
+                    setDebug(probeJson);
+                    return;
+                }
+                const resolvedType = (probeJson.document_type || '').trim();
+                if (resolvedType) {
+                    currentDocumentType = normalizeType(resolvedType);
+                    populateDocumentTypeSelect([], currentDocumentType);
+                    setExistingInfo(`Loaded existing document (${docId}) with type: ${resolvedType}`);
+                } else {
+                    setExistingInfo(`Loaded existing document (${docId}).`);
+                }
+
+                if (probeJson.status === 'completed' || probeJson.processing_status === 'done') {
+                    currentDocumentId = docId;
+                    hideUploadStatus();
+                    loadingWrap.style.display = 'block';
+                    setLoadingMessage('Loading existing results...', 'Document is already completed.');
+                    setExistingInfo(`Document ${docId} is completed. Loading existing results.`);
+                    await loadResults();
+                    return;
+                }
+            } catch (e) {
+                showError(`Failed to validate document ID: ${e.message}`);
+                setExistingInfo('Failed to validate existing document ID.');
+                return;
+            }
+            setExistingInfo(`Triggering processing for existing document ${docId}...`);
+            triggerCurrent();
         }
 
         function startPolling() {
@@ -1026,7 +1353,7 @@
             if (!resp.ok) {
                 clearInterval(statusTimer);
                 loadingWrap.style.display = 'none';
-                showError(status.detail || 'Status call failed');
+                showError(extractApiErrorMessage(status, 'Status call failed'));
                 return;
             }
 
@@ -1069,7 +1396,7 @@
             setDebug(data);
             if (!res.ok) {
                 loadingWrap.style.display = 'none';
-                showError(data.detail || 'Failed to load results');
+                showError(extractApiErrorMessage(data, 'Failed to load results'));
                 return;
             }
 
@@ -1133,7 +1460,7 @@
 
         function resetForm() {
             currentDocumentId = null;
-            currentDocumentType = (document.getElementById('documentType').value || 'license-agreement').trim() || 'license-agreement';
+            currentDocumentType = normalizeType(documentTypeSelect.value || 'license-agreement') || 'license-agreement';
             if (statusTimer) clearInterval(statusTimer);
             hideError();
             hideNotice();
@@ -1148,6 +1475,11 @@
             resultsCard.classList.add('hidden');
             uploadCard.classList.remove('hidden');
             fileInput.value = '';
+            typeControls.style.display = 'none';
+            populateDocumentTypeSelect([], currentDocumentType);
+            setClassificationInfo('Classification: waiting for upload.');
+            renderClassificationCandidates([]);
+            setExistingInfo('Existing ID flow: idle.');
         }
 
         function goHome() {
@@ -1193,6 +1525,7 @@
         });
 
         checkServiceStatus();
+        loadDocumentTypes();
         setInterval(checkServiceStatus, 10000);
     </script>
 </body>

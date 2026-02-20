@@ -32,6 +32,10 @@ class DmsService:
         linked_entity_id: Optional[str] = None,
         container: str = "documents",
         create_job_if_ready: bool = True,
+        classification_status: Optional[str] = None,
+        classified_document_type: Optional[str] = None,
+        classifier_confidence: Optional[float] = None,
+        classification_candidates: Optional[List[Dict[str, Any]]] = None,
     ) -> str:
         if not file_path.exists() or not file_path.is_file():
             raise FileNotFoundError(f"File not found: {file_path}")
@@ -81,6 +85,10 @@ class DmsService:
             text_extraction_status=text_extraction_status,
             processing_status=processing_status,
             acu_result_blob_path=None,
+            classification_status=classification_status,
+            classified_document_type=classified_document_type,
+            classifier_confidence=classifier_confidence,
+            classification_candidates=classification_candidates,
         )
 
         # Optional: create a first extraction job (recommended once you move to Celery)
@@ -130,6 +138,9 @@ class DmsService:
             document_id=document_id,
             acu_result_blob_path=acu_result_blob_path,
         )
+
+    def update_document_type(self, *, document_id: str, document_type: str) -> bool:
+        return self.metadata_repository.update_document_type(document_id=document_id, document_type=document_type)
 
     # --- extraction jobs (missing pieces vs author) ---
     def create_extraction_job(self, *, document_id: str, status: str = "pending extraction") -> str:

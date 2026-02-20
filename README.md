@@ -23,12 +23,13 @@ End-to-end document extraction pipeline using:
 ## Data Flow
 
 1. Upload file to `/api/v1/upload`
-2. File stored in `documents/raw/<document_type>/<document_id>.<ext>`
-3. Trigger processing via `/api/v1/documents/{document_id}/trigger`
-4. Celery runs ACU extraction
-5. ACU JSON stored in `documents/acu/<document_type>/<document_id>.json`
-6. Metadata/status updated in PostgreSQL
-7. Results served by `/api/v1/results/{document_id}`
+2. API auto-runs ACU classifier and stores detected `document_type`
+3. File stored in `documents/raw/<document_type>/<document_id>.<ext>`
+4. User can override detected type, then trigger via `/api/v1/documents/{document_id}/trigger`
+5. Celery runs ACU extraction with analyzer mapped to final `document_type`
+6. ACU JSON stored in `documents/acu/<document_type>/<document_id>.json`
+7. Metadata/status updated in PostgreSQL
+8. Results served by `/api/v1/results/{document_id}`
 
 ## Prerequisites
 
@@ -50,8 +51,6 @@ AZURE_AI_API_KEY=...
 AZURE_AI_API_VERSION=2025-11-01
 # Required when setting ACU defaults for a fresh Azure account:
 ACU_GPT41_MINI_DEPLOYMENT=...
-# Optional fallback only (runtime prefers hardcoded mapping by document_type):
-# ACU_ANALYZER_ID=...
 
 # Observability (OpenTelemetry -> Azure Application Insights)
 APPLICATIONINSIGHTS_CONNECTION_STRING=...
@@ -77,6 +76,53 @@ Notes:
 - Inside Docker, `compose.yml` explicitly overrides service connectivity for worker:
   - `PGHOST=postgres`
   - `REDIS_URL=redis://redis:6379/0`
+
+## Ops Bootstrap (Run Before Starting Project)
+
+Run these once per new Azure account/subscription (or whenever you need to recreate ACU assets).
+
+### 1) Activate venv and run from project root
+
+```bash
+# Git Bash
+source .venv/Scripts/activate
+```
+
+```powershell
+# PowerShell
+.\.venv\Scripts\Activate.ps1
+```
+
+### 2) Create ACU analyzers/classifier
+
+Recommended order:
+
+1. License analyzer (also handles `gpt-4.1-mini` defaults if missing)
+2. Service analyzer
+3. CUAD classifier
+
+```bash
+python -m ops.analyzers.license_agreement.create_license_agreement_analyzer
+python -m ops.analyzers.service_agreement.create_service_agreement_analyzer
+python -m ops.classifier.create_cuad_classifier
+```
+
+If you get `DefaultsNotSet` or model deployment errors, set:
+
+```env
+ACU_GPT41_MINI_DEPLOYMENT=<your-azure-openai-deployment-name>
+```
+
+then rerun step 2.
+
+### 3) (Optional) Apply DB SQL assets for reviewed output tables
+
+SQL files are in:
+
+- `ops/db/migrations/`
+- `ops/db/reviewed_tables/`
+
+Run them in your SQL client (for example DBeaver) against `dms_meta` before using full review/write flows.
 
 ## How To Run
 
@@ -165,10 +211,12 @@ Use the dedicated `ops/` folder for per-document-type rollout:
   - `ops/db/reviewed_tables/reviewed_license_agreement.sql`
   - `ops/db/migrations/`
 
-Create analyzer:
+Create analyzers/classifier:
 
 ```bash
 python -m ops.analyzers.license_agreement.create_license_agreement_analyzer
+python -m ops.analyzers.service_agreement.create_service_agreement_analyzer
+python -m ops.classifier.create_cuad_classifier
 ```
 
 Apply reviewed table SQL (example):
@@ -187,9 +235,9 @@ ACU analyzer selection is resolved at runtime from a hardcoded map keyed by `doc
 Lookup order:
 
 1. `HARDCODED_ACU_ANALYZERS[document_type]`
-2. Optional env fallback (`ACU_ANALYZER_ID` or `AZURE_AI_ANALYZER_ID`)
+2. Default hardcoded fallback (`license-agreement`) if needed
 
-This means you do not need `ACU_ANALYZER_ID` in `compose.yml` for normal multi-type routing.
+Analyzer/classifier IDs are code-owned and do not require `compose.yml` env entries.
 
 ## UI Usage
 

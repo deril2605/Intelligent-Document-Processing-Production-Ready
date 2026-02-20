@@ -20,7 +20,9 @@ def _required_env(name: str) -> str:
 # Move this to DB mapping later when analyzer management is finalized.
 HARDCODED_ACU_ANALYZERS = {
     "license-agreement": "license_agreement_extraction_wrt_CUAD_v4_raw_normalized_singlepass",
+    "service": "service_agreement_extraction_wrt_CUAD_v1_raw_normalized_singlepass",
 }
+HARDCODED_ACU_CLASSIFIER_ID = "cuad_contract_classifier_v1"
 
 
 def get_hardcoded_analyzer_id(document_type: str) -> str | None:
@@ -28,6 +30,10 @@ def get_hardcoded_analyzer_id(document_type: str) -> str | None:
     if not key:
         return None
     return HARDCODED_ACU_ANALYZERS.get(key)
+
+
+def get_supported_document_types() -> list[str]:
+    return sorted(HARDCODED_ACU_ANALYZERS.keys())
 
 
 # -------------------------
@@ -102,6 +108,7 @@ class AcuConfig:
     endpoint: str
     api_key: str
     analyzer_id: str | None
+    classifier_id: str | None
 
 
 # -------------------------
@@ -157,7 +164,9 @@ class AppConfig:
         self.acu = AcuConfig(
             endpoint=os.getenv("AZURE_AI_ENDPOINT", "https://YOUR-ACU-RESOURCE.cognitiveservices.azure.com/"),
             api_key=os.getenv("AZURE_AI_API_KEY", "YOUR_ACU_KEY"),
-            analyzer_id=os.getenv("ACU_ANALYZER_ID") or os.getenv("AZURE_AI_ANALYZER_ID"),
+            # Analyzer and classifier IDs are code-owned by design.
+            analyzer_id=HARDCODED_ACU_ANALYZERS.get("license-agreement"),
+            classifier_id=HARDCODED_ACU_CLASSIFIER_ID,
         )
 
         # API service

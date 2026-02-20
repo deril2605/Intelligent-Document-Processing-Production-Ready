@@ -26,6 +26,14 @@ CREATE TABLE IF NOT EXISTS documents (
         DEFAULT 'pending extraction'
         CHECK (processing_status IN ('pending extraction', 'acu running', 'done', 'failed')),
 
+    classification_status VARCHAR(50)
+        DEFAULT 'pending'
+        CHECK (classification_status IN ('pending', 'running', 'completed', 'failed', 'skipped')),
+
+    classified_document_type VARCHAR(100),
+    classifier_confidence DOUBLE PRECISION,
+    classification_candidates JSONB,
+
     -- ACU reference
     acu_result_blob_path VARCHAR(500),
 

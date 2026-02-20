@@ -21,6 +21,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from opentelemetry import trace
 
+from ..acu.client import AzureContentUnderstandingClient
 from .models import (
     DocumentResultsResponse,
     DocumentStatusResponse,
@@ -32,7 +33,7 @@ from .models import (
 )
 from ..async_processing import AsyncDocumentProcessor
 from ..celery_app import celery_app
-from ..config import AppConfig
+from ..config import AppConfig, get_supported_document_types
 from ..storage.storage import Stage, get_storage
 from ..visualization import build_acu_annotated_pages
 
@@ -51,6 +52,11 @@ def _set_span_attrs(attributes: Dict[str, Any]) -> None:
         if value is None:
             continue
         span.set_attribute(key, value)
+
+
+def _normalize_document_type(value: str) -> str:
+    normalized = re.sub(r"[^a-zA-Z0-9]+", "-", (value or "").strip().lower()).strip("-")
+    return normalized or "unknown"
 
 
 def _latest_job(extraction_jobs: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -141,22 +147,112 @@ def _upload_and_fetch_status(*, payload: bytes, filename: str, document_type: st
     suffix = os.path.splitext(filename)[1] or ".bin"
     temp_path = None
 
+    def _extract_classifier_candidates(classify_result: Dict[str, Any]) -> List[Dict[str, Any]]:
+        candidates: List[Dict[str, Any]] = []
+
+        def _walk(node: Any) -> None:
+            if isinstance(node, dict):
+                label = (
+                    node.get("contentClass")
+                    or node.get("category")
+                    or node.get("label")
+                    or node.get("class")
+                )
+                confidence = node.get("confidence")
+                if isinstance(label, str) and label.strip():
+                    clean_label = label.strip()
+                    try:
+                        clean_conf = float(confidence) if confidence is not None else None
+                    except Exception:
+                        clean_conf = None
+                    candidates.append({"document_type": clean_label, "confidence": clean_conf})
+                for value in node.values():
+                    _walk(value)
+            elif isinstance(node, list):
+                for item in node:
+                    _walk(item)
+
+        _walk(classify_result)
+        deduped: Dict[str, Dict[str, Any]] = {}
+        for item in candidates:
+            key = str(item["document_type"]).strip().lower()
+            if not key:
+                continue
+            prev = deduped.get(key)
+            if prev is None:
+                deduped[key] = item
+                continue
+            prev_conf = prev.get("confidence")
+            cur_conf = item.get("confidence")
+            if cur_conf is not None and (prev_conf is None or cur_conf > prev_conf):
+                deduped[key] = item
+        return sorted(
+            deduped.values(),
+            key=lambda x: (x.get("confidence") is not None, x.get("confidence") or -1),
+            reverse=True,
+        )
+
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             tmp.write(payload)
             temp_path = tmp.name
 
+        cfg = AppConfig()
+        classification_status = "skipped"
+        classification_error: Optional[str] = None
+        classified_document_type = _normalize_document_type(document_type)
+        classifier_confidence: Optional[float] = None
+        classification_candidates: List[Dict[str, Any]] = []
+
+        classifier_id = cfg.acu.classifier_id
+        if classifier_id:
+            classification_status = "running"
+            try:
+                acu_client = AzureContentUnderstandingClient(
+                    endpoint=cfg.acu.endpoint,
+                    api_version="2025-11-01",
+                    subscription_key=cfg.acu.api_key,
+                    token_provider=None,
+                    x_ms_useragent="azure-ai-content-understanding-python-sample-ga",
+                )
+                classify_response = acu_client.begin_analyze_binary(
+                    analyzer_id=classifier_id,
+                    file_location=temp_path,
+                )
+                classify_result = acu_client.poll_result(classify_response)
+                classification_candidates = _extract_classifier_candidates(classify_result)
+                if classification_candidates:
+                    classified_document_type = _normalize_document_type(str(classification_candidates[0]["document_type"]))
+                    raw_conf = classification_candidates[0].get("confidence")
+                    classifier_confidence = float(raw_conf) if raw_conf is not None else None
+                classification_status = "completed"
+            except Exception as exc:
+                logger.warning("Classification failed for '%s': %s", filename, exc)
+                classification_status = "failed"
+                classification_error = str(exc)
+        else:
+            logger.warning("No hardcoded classifier configured. Using provided document_type.")
+
         document_id = proc.dms_service.upload_document(
             file_path=Path(temp_path),
-            document_type=document_type,
+            document_type=classified_document_type,
             source_filename=filename,
             create_job_if_ready=False,
+            classification_status=classification_status,
+            classified_document_type=classified_document_type,
+            classifier_confidence=classifier_confidence,
+            classification_candidates=classification_candidates,
         )
         status = proc.get_processing_status(document_id=document_id)
         return {
             "document_id": document_id,
             "source_filename": filename,
-            "document_type": document_type,
+            "document_type": classified_document_type,
+            "classification_status": classification_status,
+            "classification_error": classification_error,
+            "classified_document_type": classified_document_type,
+            "classifier_confidence": classifier_confidence,
+            "classification_candidates": classification_candidates,
             "status": status,
         }
     finally:
@@ -207,15 +303,27 @@ def trigger_document_processing(
         False,
         description="If true, reuse existing ACU blob/result and skip a new ACU run.",
     ),
+    document_type_override: Optional[str] = Query(
+        None,
+        description="Optional manual override for document type before processing.",
+    ),
 ) -> Dict[str, str]:
     _set_span_attrs(
         {
             "idp.operation": "trigger_document_processing",
             "idp.document_id": document_id,
             "idp.reuse_existing": reuse_existing,
+            "idp.document_type_override": document_type_override,
         }
     )
     proc = _new_processor()
+    if document_type_override:
+        clean_type = _normalize_document_type(document_type_override)
+        if not clean_type:
+            raise HTTPException(status_code=400, detail="Invalid document_type_override")
+        ok = proc.dms_service.update_document_type(document_id=document_id, document_type=clean_type)
+        if not ok:
+            raise HTTPException(status_code=404, detail="Document not found")
 
     if reuse_existing:
         doc = proc.dms_service.get_document(document_id=document_id)
@@ -277,7 +385,13 @@ def trigger_document_processing(
     task_id = proc.trigger_processing(document_id=document_id)
     if not task_id:
         raise HTTPException(status_code=400, detail="Could not trigger processing for document")
-    return {"document_id": document_id, "task_id": task_id, "status": "queued"}
+    updated_doc = proc.dms_service.get_document(document_id=document_id) or {}
+    return {
+        "document_id": document_id,
+        "task_id": task_id,
+        "status": "queued",
+        "document_type": str(updated_doc.get("document_type") or ""),
+    }
 
 
 @router.get("/documents/{document_id}/status", response_model=DocumentStatusResponse)
@@ -295,6 +409,11 @@ def get_document_status(document_id: str) -> DocumentStatusResponse:
     return DocumentStatusResponse(
         document_id=document_id,
         status=_map_status(raw),
+        document_type=doc.get("document_type"),
+        classification_status=doc.get("classification_status"),
+        classified_document_type=doc.get("classified_document_type"),
+        classifier_confidence=doc.get("classifier_confidence"),
+        classification_candidates=doc.get("classification_candidates") or [],
         text_extraction_status=raw.get("text_extraction_status"),
         processing_status=raw.get("processing_status"),
         extraction_jobs=raw.get("extraction_jobs") or [],
@@ -431,6 +550,7 @@ def get_document_results(document_id: str) -> DocumentResultsResponse:
     return DocumentResultsResponse(
         document_id=document_id,
         status=_map_status(raw),
+        document_type=(proc.dms_service.get_document(document_id=document_id) or {}).get("document_type"),
         acu_result_blob_path=acu_blob_path,
         acu_result=parsed,
         extracted_fields=_extract_fields_from_payload(parsed),
@@ -685,6 +805,11 @@ def list_documents(limit: int = 50, offset: int = 0) -> List[DocumentStatusRespo
             DocumentStatusResponse(
                 document_id=doc["id"],
                 status=_map_status(raw),
+                document_type=doc.get("document_type"),
+                classification_status=doc.get("classification_status"),
+                classified_document_type=doc.get("classified_document_type"),
+                classifier_confidence=doc.get("classifier_confidence"),
+                classification_candidates=doc.get("classification_candidates") or [],
                 text_extraction_status=raw.get("text_extraction_status"),
                 processing_status=raw.get("processing_status"),
                 extraction_jobs=raw.get("extraction_jobs") or [],
@@ -772,3 +897,8 @@ def health_check() -> HealthCheckResponse:
         timestamp=datetime.now(timezone.utc),
         services=services,
     )
+
+
+@router.get("/document-types")
+def get_document_types() -> Dict[str, List[str]]:
+    return {"document_types": get_supported_document_types()}

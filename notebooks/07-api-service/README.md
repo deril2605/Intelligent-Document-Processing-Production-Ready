@@ -17,10 +17,11 @@ Start and validate the FastAPI layer and test upload/trigger/status/results from
 4. Start API subprocess with `run_api.py`.
 5. Call `/api/v1/health`.
 6. Upload document to `/api/v1/upload`.
-7. Trigger with `/api/v1/documents/{id}/trigger`.
-8. Poll `/api/v1/documents/{id}/status`.
-9. Optional SQL checks for document/job states.
-10. Verify trace telemetry in Application Insights (`Search` -> `Traces`).
+7. Upload now auto-runs classifier; review detected type (optional override).
+8. Trigger with `/api/v1/documents/{id}/trigger`.
+9. Poll `/api/v1/documents/{id}/status`.
+10. Optional SQL checks for document/job states.
+11. Verify trace telemetry in Application Insights (`Search` -> `Traces`).
 
 ## Key Endpoints Used
 

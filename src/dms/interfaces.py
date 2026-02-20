@@ -42,6 +42,10 @@ class MetadataRepository(Protocol):
         text_extraction_status: str,
         processing_status: str,
         acu_result_blob_path: Optional[str],
+        classification_status: Optional[str],
+        classified_document_type: Optional[str],
+        classifier_confidence: Optional[float],
+        classification_candidates: Optional[List[Dict[str, Any]]],
     ) -> None:
         ...
 
@@ -58,6 +62,9 @@ class MetadataRepository(Protocol):
         ...
 
     def update_acu_result_blob_path(self, *, document_id: str, acu_result_blob_path: str) -> bool:
+        ...
+
+    def update_document_type(self, *, document_id: str, document_type: str) -> bool:
         ...
 
     def list_documents_paginated(self, *, limit: int, offset: int) -> List[Dict[str, Any]]:

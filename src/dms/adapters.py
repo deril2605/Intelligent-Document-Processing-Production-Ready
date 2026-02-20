@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Optional, List, Dict, Any
 
 from azure.storage.blob import BlobServiceClient, ContentSettings
+from psycopg2.extras import Json
 
 from .interfaces import StorageClient, MetadataRepository
 
@@ -45,6 +46,14 @@ class PostgresMetadataRepository(MetadataRepository):
             self._conn.autocommit = True
         except Exception:
             pass
+        self._ensure_classification_columns()
+
+    def _ensure_classification_columns(self) -> None:
+        with self._conn.cursor() as cursor:
+            cursor.execute("ALTER TABLE documents ADD COLUMN IF NOT EXISTS classification_status VARCHAR(50)")
+            cursor.execute("ALTER TABLE documents ADD COLUMN IF NOT EXISTS classified_document_type VARCHAR(100)")
+            cursor.execute("ALTER TABLE documents ADD COLUMN IF NOT EXISTS classifier_confidence DOUBLE PRECISION")
+            cursor.execute("ALTER TABLE documents ADD COLUMN IF NOT EXISTS classification_candidates JSONB")
 
     def insert_document(
         self,
@@ -61,6 +70,10 @@ class PostgresMetadataRepository(MetadataRepository):
         text_extraction_status: str,
         processing_status: str,
         acu_result_blob_path: Optional[str] = None,
+        classification_status: Optional[str] = None,
+        classified_document_type: Optional[str] = None,
+        classifier_confidence: Optional[float] = None,
+        classification_candidates: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         with self._conn.cursor() as cursor:
             cursor.execute(
@@ -77,9 +90,13 @@ class PostgresMetadataRepository(MetadataRepository):
                     processing_status,
                     source_filename,
                     blob_path,
-                    acu_result_blob_path
+                    acu_result_blob_path,
+                    classification_status,
+                    classified_document_type,
+                    classifier_confidence,
+                    classification_candidates
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     document_id,
@@ -94,6 +111,10 @@ class PostgresMetadataRepository(MetadataRepository):
                     source_filename,
                     blob_path,
                     acu_result_blob_path,
+                    classification_status,
+                    classified_document_type,
+                    classifier_confidence,
+                    Json(classification_candidates or []),
                 ),
             )
 
@@ -115,7 +136,11 @@ class PostgresMetadataRepository(MetadataRepository):
                     processing_status,
                     source_filename,
                     blob_path,
-                    acu_result_blob_path
+                    acu_result_blob_path,
+                    classification_status,
+                    classified_document_type,
+                    classifier_confidence,
+                    classification_candidates
                 FROM documents
                 WHERE id = %s
                 """,
@@ -140,6 +165,10 @@ class PostgresMetadataRepository(MetadataRepository):
                 "source_filename": row[11],
                 "blob_path": row[12],
                 "acu_result_blob_path": row[13],
+                "classification_status": row[14],
+                "classified_document_type": row[15],
+                "classifier_confidence": row[16],
+                "classification_candidates": row[17] or [],
             }
 
     def list_documents_by_type(self, *, document_type: str) -> List[Dict[str, Any]]:
@@ -160,7 +189,11 @@ class PostgresMetadataRepository(MetadataRepository):
                     processing_status,
                     source_filename,
                     blob_path,
-                    acu_result_blob_path
+                    acu_result_blob_path,
+                    classification_status,
+                    classified_document_type,
+                    classifier_confidence,
+                    classification_candidates
                 FROM documents
                 WHERE document_type = %s
                 ORDER BY created_at DESC
@@ -185,6 +218,10 @@ class PostgresMetadataRepository(MetadataRepository):
                 "source_filename": r[11],
                 "blob_path": r[12],
                 "acu_result_blob_path": r[13],
+                "classification_status": r[14],
+                "classified_document_type": r[15],
+                "classifier_confidence": r[16],
+                "classification_candidates": r[17] or [],
             }
             for r in rows
         ]
@@ -295,7 +332,11 @@ class PostgresMetadataRepository(MetadataRepository):
                     processing_status,
                     source_filename,
                     blob_path,
-                    acu_result_blob_path
+                    acu_result_blob_path,
+                    classification_status,
+                    classified_document_type,
+                    classifier_confidence,
+                    classification_candidates
                 FROM documents
                 ORDER BY created_at DESC
                 LIMIT %s OFFSET %s
@@ -320,6 +361,10 @@ class PostgresMetadataRepository(MetadataRepository):
                 "source_filename": r[11],
                 "blob_path": r[12],
                 "acu_result_blob_path": r[13],
+                "classification_status": r[14],
+                "classified_document_type": r[15],
+                "classifier_confidence": r[16],
+                "classification_candidates": r[17] or [],
             }
             for r in rows
         ]
@@ -334,5 +379,20 @@ class PostgresMetadataRepository(MetadataRepository):
                 WHERE id = %s
                 """,
                 (acu_result_blob_path, document_id),
+            )
+            return cursor.rowcount > 0
+
+    def update_document_type(self, *, document_id: str, document_type: str) -> bool:
+        with self._conn.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE documents
+                SET document_type = %s,
+                    classified_document_type = %s,
+                    classification_status = 'completed',
+                    updated_at = NOW()
+                WHERE id = %s
+                """,
+                (document_type, document_type, document_id),
             )
             return cursor.rowcount > 0

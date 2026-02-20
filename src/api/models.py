@@ -17,6 +17,11 @@ class DocumentUploadResponse(BaseModel):
     document_id: str
     source_filename: str
     document_type: str
+    classification_status: Optional[str] = None
+    classification_error: Optional[str] = None
+    classified_document_type: Optional[str] = None
+    classifier_confidence: Optional[float] = None
+    classification_candidates: List[Dict[str, Any]] = Field(default_factory=list)
     status: Dict[str, Any]
     task_id: Optional[str] = None
 
@@ -24,6 +29,11 @@ class DocumentUploadResponse(BaseModel):
 class DocumentStatusResponse(BaseModel):
     document_id: str
     status: ProcessingStatus
+    document_type: Optional[str] = None
+    classification_status: Optional[str] = None
+    classified_document_type: Optional[str] = None
+    classifier_confidence: Optional[float] = None
+    classification_candidates: List[Dict[str, Any]] = Field(default_factory=list)
     text_extraction_status: Optional[str] = None
     processing_status: Optional[str] = None
     extraction_jobs: List[Dict[str, Any]] = Field(default_factory=list)
@@ -36,6 +46,7 @@ class DocumentStatusResponse(BaseModel):
 class DocumentResultsResponse(BaseModel):
     document_id: str
     status: ProcessingStatus
+    document_type: Optional[str] = None
     acu_result_blob_path: Optional[str] = None
     acu_result: Dict[str, Any] = Field(default_factory=dict)
     extracted_fields: Dict[str, Any] = Field(default_factory=dict)

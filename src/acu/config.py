@@ -4,6 +4,8 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+from src.config.system import HARDCODED_ACU_ANALYZERS
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -22,9 +24,9 @@ def load_settings() -> Settings:
     if not endpoint:
         raise RuntimeError("Missing env var: AZURE_AI_ENDPOINT")
 
-    analyzer_id = os.getenv("ACU_ANALYZER_ID") or os.getenv("AZURE_AI_ANALYZER_ID")
+    analyzer_id = HARDCODED_ACU_ANALYZERS.get("license-agreement")
     if not analyzer_id:
-        raise RuntimeError("Missing env var: ACU_ANALYZER_ID (or AZURE_AI_ANALYZER_ID)")
+        raise RuntimeError("Missing hardcoded analyzer mapping for 'license-agreement'")
 
     storage_cs = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
     if not storage_cs:
