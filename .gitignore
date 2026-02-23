@@ -38,3 +38,4 @@ src/__pycache__/
 test_output
 
 src/credit_ocr_system.egg-info
+build/
