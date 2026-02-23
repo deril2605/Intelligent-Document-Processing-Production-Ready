@@ -20,6 +20,17 @@ End-to-end document extraction pipeline using:
 - `start_document_pipeline.py`: optional orchestrator script
 - `ops/`: analyzer scripts + database SQL assets for repeatable rollout
 
+## UI Screenshots
+
+#### Home Page
+![alt text](images/home-ui.png)
+
+#### Visual UI
+![alt text](images/visual-ui.png)
+
+#### Norm fields UI
+![alt text](images/norm-fields.png)
+
 ## Data Flow
 
 1. Upload file to `/api/v1/upload`
