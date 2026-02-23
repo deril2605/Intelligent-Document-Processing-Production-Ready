@@ -31,6 +31,63 @@ End-to-end document extraction pipeline using:
 7. Metadata/status updated in PostgreSQL
 8. Results served by `/api/v1/results/{document_id}`
 
+## Structured Data Persistence (Postgres)
+
+This project persists structured data in two layers:
+
+1. Operational metadata tables (always used)
+2. Reviewed document-type tables (optional, enabled via `ops/db/reviewed_tables`)
+
+### Operational metadata (always on)
+
+Core tables in `dms_meta` track ingestion and pipeline execution:
+
+- `documents`
+  - document identity and file metadata
+  - blob pointers (`blob_path`, `acu_result_blob_path`)
+  - extraction + processing status fields
+  - audit timestamps (`created_at`, `updated_at`)
+- `extraction_jobs`
+  - async job lifecycle and error state per document
+  - creation/completion timestamps
+
+Write path in code:
+
+- Upload/register: `src/dms/service.py`
+- DB adapter: `src/dms/adapters.py`
+- Async updates: `src/tasks/pipeline_tasks.py`
+
+### Reviewed structured outputs (optional)
+
+For typed business-ready outputs (for example license-agreement normalized fields), apply SQL assets from:
+
+- `ops/db/reviewed_tables/`
+- `ops/db/migrations/`
+
+These tables are intended for downstream app/reporting workflows, while full ACU payloads remain in Blob for traceability.
+
+### Blob vs DB responsibility
+
+- Azure Blob stores large artifacts:
+  - source files (`documents/raw/...`)
+  - full ACU JSON (`documents/acu/...`)
+- Postgres stores queryable structured state and relationships:
+  - statuses, job progression, document typing, reviewed normalized rows
+
+
+### Database Tables
+
+![alt text](images/tables.png)
+
+#### Documents Table
+![alt text](images/doc_table.png)
+
+#### License Agreement Table
+![alt text](images/lic_agg_table.png)
+
+#### Service Agreement Table
+![alt text](images/serv_agg_table.png)
+
 ## Prerequisites
 
 - Python 3.11+ (project venv recommended)
@@ -218,6 +275,9 @@ python -m ops.analyzers.license_agreement.create_license_agreement_analyzer
 python -m ops.analyzers.service_agreement.create_service_agreement_analyzer
 python -m ops.classifier.create_cuad_classifier
 ```
+
+Analyzers
+![alt text](images/analyzers.png)
 
 Apply reviewed table SQL (example):
 
