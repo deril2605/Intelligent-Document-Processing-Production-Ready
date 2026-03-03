@@ -8,6 +8,9 @@ End-to-end document extraction pipeline using:
 - Azure Blob Storage for document and ACU outputs
 - Azure Content Understanding (ACU) for structured extraction
 
+## Architecture
+![alt text](images/archi.png)
+
 ## Project Structure
 
 - `src/api`: FastAPI service, routes, response models, UI template
