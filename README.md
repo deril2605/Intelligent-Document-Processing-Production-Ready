@@ -11,6 +11,9 @@ End-to-end document extraction pipeline using:
 ## Architecture
 ![alt text](images/archi.png)
 
+## Data Flow
+![alt text](images/data-flow.png)
+
 ## Project Structure
 
 - `src/api`: FastAPI service, routes, response models, UI template
