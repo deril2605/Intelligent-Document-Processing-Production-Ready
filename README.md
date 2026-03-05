@@ -8,6 +8,9 @@ End-to-end document extraction pipeline using:
 - Azure Blob Storage for document and ACU outputs
 - Azure Content Understanding (ACU) for structured extraction
 
+Click below to watch the demo ⬇️
+[![Watch the demo](https://img.youtube.com/vi/Bq9vYdkDa7Y/maxresdefault.jpg)](https://www.youtube.com/watch?v=Bq9vYdkDa7Y)
+
 ## Architecture
 ![alt text](images/archi.png)
 
