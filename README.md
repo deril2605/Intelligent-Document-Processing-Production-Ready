@@ -350,3 +350,137 @@ Analyzer/classifier IDs are code-owned and do not require `compose.yml` env entr
 This project uses the **CUAD** dataset as a reference for contract clause extraction design/evaluation:
 
 - https://www.atticusprojectai.org/cuad
+
+## Cost Analysis
+
+### Cost Analysis - Azure Content Understanding + GPT-4.1 Series
+
+This project uses Azure Content Understanding (ACU) for structured extraction and Azure OpenAI (GPT-4.1 series) for field reasoning.
+
+This section provides a transparent breakdown of expected costs based on real usage trials.
+
+### Real Usage Metrics (From Test Runs)
+
+The following averages were derived from multiple document processing trials:
+
+| Metric | Average Per Page |
+| --- | ---: |
+| Contextualization Tokens | 1,000 |
+| GPT Input Tokens | ~1,405 |
+| GPT Output Tokens | ~153 |
+
+These numbers reflect actual extraction workloads for legal-style documents (license/service agreements).
+
+### Pricing Assumptions (Global Deployment)
+
+Azure OpenAI pricing (East US / West US - Global models):
+
+| Model | Input ($ / 1M tokens) | Output ($ / 1M tokens) |
+| --- | ---: | ---: |
+| GPT-4.1 | $2.00 | $8.00 |
+| GPT-4.1-mini | $0.40 | $1.60 |
+| GPT-4.1-nano | $0.10 | $0.40 |
+
+Azure Content Understanding pricing:
+
+- Content Extraction: $5 per 1,000 pages
+- Contextualization: $1 per 1M tokens
+- Embeddings not included (no labeled examples / KB used)
+
+### Cost Per 1,000 Pages (Based on Real Usage)
+
+| Model | Content Extraction | Context | Input Tokens | Output Tokens | Total / 1K Pages |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| GPT-4.1 | $5.00 | $1.00 | $2.81 | $1.22 | $10.03 |
+| GPT-4.1-mini | $5.00 | $1.00 | $0.56 | $0.24 | $6.81 |
+| GPT-4.1-nano | $5.00 | $1.00 | $0.14 | $0.06 | $6.20 |
+
+### Cost Per Page
+
+| Model | Cost / Page |
+| --- | ---: |
+| GPT-4.1 | ~$0.010 |
+| GPT-4.1-mini | ~$0.0068 |
+| GPT-4.1-nano | ~$0.0062 |
+
+Interpretation:
+
+- Processing costs are well under 1 cent per page for mini/nano
+- The dominant cost driver is page processing, not token usage
+
+### Cost Per Document Scenarios
+
+10 pages per document:
+
+| Model | Cost / Document | Cost / 1,000 Documents |
+| --- | ---: | ---: |
+| GPT-4.1 | $0.10 | $100 |
+| GPT-4.1-mini | $0.068 | $68 |
+| GPT-4.1-nano | $0.062 | $62 |
+
+20 pages per document:
+
+| Model | Cost / Document | Cost / 1,000 Documents |
+| --- | ---: | ---: |
+| GPT-4.1 | $0.20 | $200 |
+| GPT-4.1-mini | $0.136 | $136 |
+| GPT-4.1-nano | $0.124 | $124 |
+
+50 pages per document:
+
+| Model | Cost / Document | Cost / 1,000 Documents |
+| --- | ---: | ---: |
+| GPT-4.1 | $0.50 | $501 |
+| GPT-4.1-mini | $0.34 | $340 |
+| GPT-4.1-nano | $0.31 | $310 |
+
+### Production Scale Projection
+
+| Total Pages | GPT-4.1 | GPT-4.1-mini | GPT-4.1-nano |
+| --- | ---: | ---: | ---: |
+| 10,000 pages | $100 | $68 | $62 |
+| 100,000 pages | $1,003 | $681 | $620 |
+| 1,000,000 pages | $10,030 | $6,810 | $6,200 |
+
+### Key Insights
+
+- Page processing dominates cost: the $5 / 1,000 pages ACU charge is the primary driver
+- LLM cost differences are modest:
+- GPT-4.1 -> mini reduces cost by ~32%
+- mini -> nano reduces cost by ~9%
+- Scaling impact is linear: cost scales directly with total page volume
+- Token variance has minimal impact compared to page count
+
+Practical takeaway:
+
+For structured contract extraction workloads, GPT-4.1-mini provides an excellent cost-performance balance.
+
+Optimization efforts should focus on:
+
+- Reducing unnecessary page processing
+- Avoiding reprocessing duplicates
+- Minimizing contextualization when not needed
+
+### Example Formula
+
+For 1,000 pages:
+
+```
+Total Cost =
+(Content Extraction)
++ (Contextualization Tokens / 1M x $1)
++ (Input Tokens / 1M x Model Input Price)
++ (Output Tokens / 1M x Model Output Price)
+```
+
+### Summary
+
+This Intelligent Document Processing system processes legal contracts at:
+
+- ~$6-$10 per 1,000 pages
+- <$0.01 per page
+- <$0.15 per 20-page contract
+
+This makes the solution economically viable even at large production scale.
+
+If desired, a cost-estimation utility can be added to automatically compute pricing from the API `usage` block for observability and budget tracking.

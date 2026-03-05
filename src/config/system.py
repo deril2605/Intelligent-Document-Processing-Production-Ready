@@ -20,7 +20,7 @@ def _required_env(name: str) -> str:
 # Move this to DB mapping later when analyzer management is finalized.
 HARDCODED_ACU_ANALYZERS = {
     "license-agreement": "license_agreement_extraction_wrt_CUAD_v4_raw_normalized_singlepass",
-    "service": "service_agreement_extraction_wrt_CUAD_v1_raw_normalized_singlepass",
+    "service": "service_agreement_extraction_wrt_CUAD_v4_raw_normalized_singlepass",
 }
 HARDCODED_ACU_CLASSIFIER_ID = "cuad_contract_classifier_v1"
 

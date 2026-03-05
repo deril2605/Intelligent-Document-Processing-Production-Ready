@@ -1131,7 +1131,7 @@
                     showModal(json.detail || 'Failed to save reviewed fields.');
                     return;
                 }
-                const successMsg = `Saved ${json.saved_field_count} field(s) to table ${json.table_name}.`;
+                const successMsg = `Saved ${json.saved_field_count} field(s) to table ${json.table_name}. Document ID: ${json.document_id}. Record ID: ${json.record_id}.`;
                 showNotice(successMsg, 'success');
                 showModal(successMsg);
             } catch (err) {
