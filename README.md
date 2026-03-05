@@ -16,6 +16,8 @@ Click below to watch the demo ⬇️
 
 ## Data Flow
 ![alt text](images/data-flow.png)
+<img width="1677" height="513" alt="image" src="https://github.com/user-attachments/assets/3b566ab8-dbe2-4d78-bc55-2457728be9ef" />
+
 
 ## Project Structure
 
